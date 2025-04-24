@@ -1,0 +1,1119 @@
+import express, { type Express, Request, Response } from "express";
+import { createServer, type Server } from "http";
+import { storage } from "./storage";
+import { generateCardImage } from "./image-generator";
+import path from "path";
+import fs from "fs";
+import { setupAuth, isAuthenticated, isAdmin, comparePasswords, hashPassword } from "./auth";
+import { generateCertificateImage } from "./certificate-generator";
+import { processExcelBatch } from "./batch-processor";
+import multer from "multer";
+import { randomUUID } from "crypto";
+import { z } from "zod";
+import {
+  insertCategorySchema,
+  insertTemplateSchema,
+  insertTemplateFieldSchema,
+  insertFontSchema,
+  insertSettingSchema,
+  categories
+} from "@shared/schema";
+import { db } from "./db";
+
+export async function registerRoutes(app: Express): Promise<Server> {
+  // Setup directory structure
+  const uploadsDir = path.join(process.cwd(), "uploads");
+  const tempDir = path.join(process.cwd(), "temp");
+  
+  // Create uploads directory for storing generated images if it doesn't exist
+  if (!fs.existsSync(uploadsDir)) {
+    fs.mkdirSync(uploadsDir, { recursive: true });
+  }
+  
+  // Create temp directory for temporary files
+  if (!fs.existsSync(tempDir)) {
+    fs.mkdirSync(tempDir, { recursive: true });
+  }
+  
+  // Setup file upload middleware
+  const multerStorage = multer.diskStorage({
+    destination: function(req, file, cb) {
+      cb(null, tempDir);
+    },
+    filename: function(req, file, cb) {
+      const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+      const ext = path.extname(file.originalname);
+      cb(null, uniqueSuffix + ext);
+    }
+  });
+  
+  const fileFilter = (req: Request, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
+    // Accept images, excel files, csv files
+    if (
+      file.mimetype.startsWith('image/') || 
+      file.mimetype === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+      file.mimetype === 'application/vnd.ms-excel' ||
+      file.mimetype === 'text/csv'
+    ) {
+      cb(null, true);
+    } else {
+      cb(new Error('نوع الملف غير مدعوم'));
+    }
+  };
+  
+  const upload = multer({ 
+    storage: multerStorage, 
+    fileFilter,
+    limits: {
+      fileSize: 10 * 1024 * 1024, // 10MB
+    }
+  });
+  
+  // Setup auth
+  setupAuth(app);
+  
+  // ====================
+  // PUBLIC API ENDPOINTS
+  // ====================
+  
+  // API routes for categories (public)
+  app.get("/api/categories", async (req, res) => {
+    try {
+      console.log("Fetching categories with options:", { 
+        active: req.query.active 
+      });
+      
+      const active = req.query.active === 'true' ? true : 
+                     req.query.active === 'false' ? false : undefined;
+                     
+      // Debug log storage object and db connection
+      console.log("Storage methods:", Object.keys(storage));
+      
+      try {
+        // Log the first category as a test
+        const testQuery = await db.select().from(categories).limit(1);
+        console.log("Test query result:", JSON.stringify(testQuery));
+      } catch (dbError) {
+        console.error("Database test query failed:", dbError);
+        if (dbError instanceof Error) console.error(dbError.stack);
+      }
+                     
+      const categoriesData = await storage.getAllCategories({ active });
+      res.json(categoriesData);
+    } catch (error) {
+      console.error("Error fetching categories:", error);
+      console.error(error instanceof Error ? error.stack : String(error));
+      res.status(500).json({ message: "حدث خطأ أثناء تحميل التصنيفات" });
+    }
+  });
+
+  // API routes for templates (public)
+  app.get("/api/templates", async (req, res) => {
+    try {
+      console.log("Fetching templates with options:", { 
+        active: req.query.active,
+        limit: req.query.limit,
+        offset: req.query.offset,
+        search: req.query.search
+      });
+      
+      const active = req.query.active === 'true' ? true : 
+                     req.query.active === 'false' ? false : undefined;
+      
+      const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
+      const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
+      const search = req.query.search as string;
+      
+      console.log("Storage methods for templates:", typeof storage.getAllTemplates);
+      
+      const result = await storage.getAllTemplates({ active, limit, offset, search });
+      res.json(result);
+    } catch (error) {
+      console.error("Error fetching templates:", error);
+      console.error(error instanceof Error ? error.stack : String(error));
+      res.status(500).json({ message: "حدث خطأ أثناء تحميل القوالب" });
+    }
+  });
+
+  // Get templates by category (public)
+  app.get("/api/categories/:slug/templates", async (req, res) => {
+    try {
+      const { slug } = req.params;
+      const active = req.query.active === 'true' ? true : 
+                     req.query.active === 'false' ? false : undefined;
+                     
+      const category = await storage.getCategoryBySlug(slug);
+      
+      if (!category) {
+        return res.status(404).json({ message: "التصنيف غير موجود" });
+      }
+      
+      const templates = await storage.getTemplatesByCategory(category.id, { active });
+      res.json(templates);
+    } catch (error) {
+      console.error("Error fetching templates by category:", error);
+      res.status(500).json({ message: "حدث خطأ أثناء تحميل القوالب" });
+    }
+  });
+
+  // Get template by ID or slug (public)
+  app.get("/api/templates/:category/:idOrSlug", async (req, res) => {
+    try {
+      const { category, idOrSlug } = req.params;
+      console.log(`Looking for template: category=${category}, idOrSlug=${idOrSlug}`);
+      
+      let template;
+      // Try to get template by ID first
+      if (!isNaN(Number(idOrSlug))) {
+        console.log(`Trying to get template by ID: ${idOrSlug}`);
+        template = await storage.getTemplate(Number(idOrSlug));
+      }
+      
+      // If not found, try by slug
+      if (!template) {
+        console.log(`Trying to get template by slug: category=${category}, slug=${idOrSlug}`);
+        template = await storage.getTemplateBySlug(category, idOrSlug);
+      }
+      
+      if (!template) {
+        console.log(`Template not found: category=${category}, idOrSlug=${idOrSlug}`);
+        return res.status(404).json({ message: "القالب غير موجود" });
+      }
+      
+      console.log(`Template found: ${template.title}, ID: ${template.id}`);
+      
+      
+      // Get template fields
+      const fields = await storage.getTemplateFields(template.id);
+      
+      res.json({ ...template, templateFields: fields });
+    } catch (error) {
+      console.error("Error fetching template:", error);
+      res.status(500).json({ message: "حدث خطأ أثناء تحميل القالب" });
+    }
+  });
+
+  // Get fonts (public)
+  app.get("/api/fonts", async (req, res) => {
+    try {
+      const active = req.query.active === 'true' ? true : 
+                    req.query.active === 'false' ? false : undefined;
+      
+      const fonts = await storage.getAllFonts({ active });
+      res.json(fonts);
+    } catch (error) {
+      console.error("Error fetching fonts:", error);
+      res.status(500).json({ message: "حدث خطأ أثناء تحميل الخطوط" });
+    }
+  });
+
+  // Create a new card (public)
+  app.post("/api/cards", async (req, res) => {
+    try {
+      const { templateId, formData, quality } = req.body;
+      
+      console.log(`Creating card with templateId: ${templateId}`);
+      
+      // Get the template
+      const template = await storage.getTemplate(templateId);
+      
+      if (!template) {
+        console.error(`Template with ID ${templateId} not found`);
+        return res.status(404).json({ message: "القالب غير موجود" });
+      }
+      
+      console.log(`Found template: ${template.title}, image: ${template.imageUrl}`);
+      
+      // Get the category
+      const category = await storage.getCategoryById(template.categoryId);
+      
+      if (!category) {
+        console.error(`Category with ID ${template.categoryId} not found`);
+        return res.status(404).json({ message: "التصنيف غير موجود" });
+      }
+      
+      console.log(`Found category: ${category.name}`);
+      console.log(`Generating card image with formData:`, formData);
+      
+      // Generate the card image
+      const imagePath = await generateCardImage(template, formData);
+      console.log(`Card image generated at: ${imagePath}`);
+      
+      // Save the card to storage
+      const card = await storage.createCard({
+        templateId: template.id,
+        userId: req.isAuthenticated() ? req.user.id : undefined,
+        formData,
+        imageUrl: `/uploads/${path.basename(imagePath)}`,
+        categoryId: template.categoryId,
+        quality: quality || 'medium',
+        publicId: randomUUID(),
+        status: 'active'
+      });
+      
+      console.log(`Card created with ID: ${card.id}, publicId: ${card.publicId}`);
+      res.json({ 
+        cardId: card.id, 
+        publicId: card.publicId,
+        imageUrl: card.imageUrl 
+      });
+    } catch (error) {
+      console.error("Error generating card:", error);
+      res.status(500).json({ message: "حدث خطأ أثناء إنشاء البطاقة" });
+    }
+  });
+  
+  // API endpoint for generating cards (used by template form)
+  app.post("/api/cards/generate", async (req, res) => {
+    try {
+      const { templateId, category, formData, quality = 'medium' } = req.body;
+      
+      console.log(`Generating card for template ID: ${templateId}, category: ${category}`);
+      
+      // Get the template
+      const template = await storage.getTemplate(Number(templateId));
+      
+      if (!template) {
+        console.error(`Template with ID ${templateId} not found`);
+        return res.status(404).json({ message: "القالب غير موجود" });
+      }
+      
+      console.log(`Found template: ${template.title}, image: ${template.imageUrl}`);
+      console.log(`Generating card with formData:`, formData);
+      
+      // Generate the card image
+      const imagePath = await generateCardImage(template, formData);
+      console.log(`Card image generated at: ${imagePath}`);
+      
+      // Save the card to storage
+      const card = await storage.createCard({
+        templateId: template.id,
+        userId: req.isAuthenticated() ? req.user?.id : null,
+        formData,
+        imageUrl: `/uploads/${path.basename(imagePath)}`,
+        categoryId: template.categoryId,
+        quality,
+        publicId: randomUUID(),
+        status: 'active'
+      });
+      
+      console.log(`Card created with ID: ${card.id}, publicId: ${card.publicId}`);
+      res.json({
+        cardId: card.id,
+        publicId: card.publicId,
+        imageUrl: card.imageUrl
+      });
+    } catch (error) {
+      console.error("Error generating card:", error);
+      res.status(500).json({ message: "حدث خطأ أثناء إنشاء البطاقة" });
+    }
+  });
+
+  // Get a card by public ID (public)
+  app.get("/api/cards/public/:publicId", async (req, res) => {
+    try {
+      const { publicId } = req.params;
+      const card = await storage.getCardByPublicId(publicId);
+      
+      if (!card) {
+        return res.status(404).json({ message: "البطاقة غير موجودة" });
+      }
+      
+      // Increment access count
+      await storage.updateCard(card.id, {
+        accessCount: (card.accessCount || 0) + 1,
+        lastAccessed: new Date()
+      });
+      
+      // Get the template
+      const template = await storage.getTemplate(card.templateId);
+      
+      if (!template) {
+        return res.status(404).json({ message: "القالب غير موجود" });
+      }
+      
+      res.json({ ...card, template });
+    } catch (error) {
+      console.error("Error fetching card:", error);
+      res.status(500).json({ message: "حدث خطأ أثناء تحميل البطاقة" });
+    }
+  });
+
+  // Create a new certificate (public)
+  app.post("/api/certificates", async (req, res) => {
+    try {
+      const { templateId, formData, certificateType, issuedTo, issuedToGender } = req.body;
+      
+      // Get the template
+      const template = await storage.getTemplate(templateId);
+      
+      if (!template) {
+        return res.status(404).json({ message: "القالب غير موجود" });
+      }
+      
+      // Generate the certificate image
+      const imagePath = await generateCertificateImage(template, formData);
+      
+      // Save the certificate to storage
+      const certificate = await storage.createCertificate({
+        templateId: template.id,
+        userId: req.isAuthenticated() ? req.user.id : undefined,
+        formData,
+        imageUrl: `/uploads/${path.basename(imagePath)}`,
+        certificateType: certificateType || 'appreciation',
+        title: formData.title || template.title,
+        titleAr: formData.titleAr || template.titleAr,
+        issuedTo,
+        issuedToGender: issuedToGender || 'male',
+        status: 'active',
+        publicId: randomUUID()
+      });
+      
+      res.json({ certificateId: certificate.id, publicId: certificate.publicId });
+    } catch (error) {
+      console.error("Error generating certificate:", error);
+      res.status(500).json({ message: "حدث خطأ أثناء إنشاء الشهادة" });
+    }
+  });
+
+  // Get a certificate by public ID (public)
+  app.get("/api/certificates/public/:publicId", async (req, res) => {
+    try {
+      const { publicId } = req.params;
+      const certificate = await storage.getCertificateByPublicId(publicId);
+      
+      if (!certificate) {
+        return res.status(404).json({ message: "الشهادة غير موجودة" });
+      }
+      
+      // Get the template
+      const template = await storage.getTemplate(certificate.templateId);
+      
+      if (!template) {
+        return res.status(404).json({ message: "القالب غير موجود" });
+      }
+      
+      res.json({ ...certificate, template });
+    } catch (error) {
+      console.error("Error fetching certificate:", error);
+      res.status(500).json({ message: "حدث خطأ أثناء تحميل الشهادة" });
+    }
+  });
+
+  // Verify a certificate (public)
+  app.get("/api/certificates/verify/:code", async (req, res) => {
+    try {
+      const { code } = req.params;
+      const certificate = await storage.getCertificateByVerificationCode(code);
+      
+      if (!certificate) {
+        return res.status(404).json({ 
+          valid: false,
+          message: "رمز التحقق غير صالح"
+        });
+      }
+      
+      // Check if expired
+      if (certificate.expiryDate && new Date(certificate.expiryDate) < new Date()) {
+        return res.json({ 
+          valid: false,
+          message: "انتهت صلاحية الشهادة",
+          certificate
+        });
+      }
+      
+      // Check if revoked
+      if (certificate.status === 'revoked') {
+        return res.json({ 
+          valid: false,
+          message: "تم إلغاء الشهادة",
+          certificate
+        });
+      }
+      
+      res.json({ 
+        valid: true,
+        certificate
+      });
+    } catch (error) {
+      console.error("Error verifying certificate:", error);
+      res.status(500).json({ message: "حدث خطأ أثناء التحقق من الشهادة" });
+    }
+  });
+
+  // ========================
+  // AUTHENTICATED API ROUTES
+  // ========================
+  
+  // Get user cards
+  app.get("/api/user/cards", isAuthenticated, async (req, res) => {
+    try {
+      const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
+      const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
+      
+      const result = await storage.getUserCards(req.user.id, { limit, offset });
+      res.json(result);
+    } catch (error) {
+      console.error("Error fetching user cards:", error);
+      res.status(500).json({ message: "حدث خطأ أثناء تحميل البطاقات" });
+    }
+  });
+
+  // Get user certificates
+  app.get("/api/user/certificates", isAuthenticated, async (req, res) => {
+    try {
+      const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
+      const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
+      const type = req.query.type as string;
+      
+      const result = await storage.getUserCertificates(req.user.id, { limit, offset, type });
+      res.json(result);
+    } catch (error) {
+      console.error("Error fetching user certificates:", error);
+      res.status(500).json({ message: "حدث خطأ أثناء تحميل الشهادات" });
+    }
+  });
+
+  // Get user certificate batches
+  app.get("/api/user/certificate-batches", isAuthenticated, async (req, res) => {
+    try {
+      const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
+      const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
+      
+      const result = await storage.getUserCertificateBatches(req.user.id, { limit, offset });
+      res.json(result);
+    } catch (error) {
+      console.error("Error fetching user certificate batches:", error);
+      res.status(500).json({ message: "حدث خطأ أثناء تحميل مجموعات الشهادات" });
+    }
+  });
+
+  // Create a certificate batch
+  app.post("/api/certificate-batches", isAuthenticated, upload.single('file'), async (req, res) => {
+    try {
+      const { templateId, title } = req.body;
+      
+      if (!req.file) {
+        return res.status(400).json({ message: "يرجى تحميل ملف Excel أو CSV" });
+      }
+      
+      // Get the template
+      const template = await storage.getTemplate(parseInt(templateId));
+      
+      if (!template) {
+        return res.status(404).json({ message: "القالب غير موجود" });
+      }
+      
+      // Create the batch
+      const batch = await storage.createCertificateBatch({
+        userId: req.user.id,
+        templateId: template.id,
+        title: title || `مجموعة شهادات ${(new Date()).toLocaleDateString('ar-SA')}`,
+        status: 'pending',
+        totalItems: 0,
+        processedItems: 0,
+        sourceType: path.extname(req.file.originalname).toLowerCase() === '.csv' ? 'csv' : 'excel',
+        sourceData: req.file.path
+      });
+      
+      // Process the batch asynchronously
+      processExcelBatch(batch.id, req.file.path, template);
+      
+      res.json({ batchId: batch.id });
+    } catch (error) {
+      console.error("Error creating certificate batch:", error);
+      res.status(500).json({ message: "حدث خطأ أثناء إنشاء مجموعة الشهادات" });
+    }
+  });
+
+  // Get batch items
+  app.get("/api/certificate-batches/:id/items", isAuthenticated, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
+      const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
+      const status = req.query.status as string;
+      
+      const batch = await storage.getCertificateBatch(parseInt(id));
+      
+      if (!batch) {
+        return res.status(404).json({ message: "مجموعة الشهادات غير موجودة" });
+      }
+      
+      // Check if user owns the batch
+      if (batch.userId !== req.user.id && req.user.role !== 'admin') {
+        return res.status(403).json({ message: "غير مصرح لك بالوصول إلى هذه المجموعة" });
+      }
+      
+      const result = await storage.getBatchItems(batch.id, { limit, offset, status });
+      res.json(result);
+    } catch (error) {
+      console.error("Error fetching batch items:", error);
+      res.status(500).json({ message: "حدث خطأ أثناء تحميل عناصر المجموعة" });
+    }
+  });
+
+  // Update user profile
+  app.put("/api/user/profile", isAuthenticated, async (req, res) => {
+    try {
+      const { name, email } = req.body;
+      
+      // Check if email is already taken
+      if (email && email !== req.user.email) {
+        const existingUser = await storage.getUserByEmail(email);
+        if (existingUser) {
+          return res.status(400).json({ message: "البريد الإلكتروني مستخدم بالفعل" });
+        }
+      }
+      
+      const updatedUser = await storage.updateUser(req.user.id, { name, email });
+      
+      if (!updatedUser) {
+        return res.status(404).json({ message: "المستخدم غير موجود" });
+      }
+      
+      // Remove password from response
+      const { password, ...userWithoutPassword } = updatedUser;
+      
+      res.json(userWithoutPassword);
+    } catch (error) {
+      console.error("Error updating user profile:", error);
+      res.status(500).json({ message: "حدث خطأ أثناء تحديث الملف الشخصي" });
+    }
+  });
+
+  // Change password
+  app.post("/api/user/change-password", isAuthenticated, async (req, res) => {
+    try {
+      const { currentPassword, newPassword } = req.body;
+      
+      // Get user with password
+      const user = await storage.getUser(req.user.id);
+      
+      if (!user) {
+        return res.status(404).json({ message: "المستخدم غير موجود" });
+      }
+      
+      // Verify current password
+      const isPasswordValid = await comparePasswords(currentPassword, user.password);
+      
+      if (!isPasswordValid) {
+        return res.status(400).json({ message: "كلمة المرور الحالية غير صحيحة" });
+      }
+      
+      // Hash new password
+      const hashedPassword = await hashPassword(newPassword);
+      
+      // Update password
+      await storage.updateUser(user.id, { password: hashedPassword });
+      
+      res.json({ message: "تم تغيير كلمة المرور بنجاح" });
+    } catch (error) {
+      console.error("Error changing password:", error);
+      res.status(500).json({ message: "حدث خطأ أثناء تغيير كلمة المرور" });
+    }
+  });
+
+  // ====================
+  // ADMIN API ENDPOINTS
+  // ====================
+
+  // Get all users (admin only)
+  app.get("/api/admin/users", isAdmin, async (req, res) => {
+    try {
+      const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
+      const offset = req.query.offset ? parseInt(req.query.offset as string) : undefined;
+      const search = req.query.search as string;
+      
+      const result = await storage.getAllUsers({ limit, offset, search });
+      
+      // Remove passwords from response
+      const usersWithoutPasswords = result.users.map(user => {
+        const { password, ...userWithoutPassword } = user;
+        return userWithoutPassword;
+      });
+      
+      res.json({ users: usersWithoutPasswords, total: result.total });
+    } catch (error) {
+      console.error("Error fetching users:", error);
+      res.status(500).json({ message: "حدث خطأ أثناء تحميل المستخدمين" });
+    }
+  });
+
+  // Category CRUD operations (admin only)
+  app.post("/api/admin/categories", isAdmin, async (req, res) => {
+    try {
+      const validatedData = insertCategorySchema.parse(req.body);
+      const category = await storage.createCategory(validatedData);
+      res.status(201).json(category);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ 
+          message: "بيانات غير صالحة", 
+          errors: error.errors 
+        });
+      }
+      console.error("Error creating category:", error);
+      res.status(500).json({ message: "حدث خطأ أثناء إنشاء التصنيف" });
+    }
+  });
+
+  app.put("/api/admin/categories/:id", isAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const category = await storage.updateCategory(parseInt(id), req.body);
+      
+      if (!category) {
+        return res.status(404).json({ message: "التصنيف غير موجود" });
+      }
+      
+      res.json(category);
+    } catch (error) {
+      console.error("Error updating category:", error);
+      res.status(500).json({ message: "حدث خطأ أثناء تحديث التصنيف" });
+    }
+  });
+
+  app.delete("/api/admin/categories/:id", isAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const success = await storage.deleteCategory(parseInt(id));
+      
+      if (!success) {
+        return res.status(404).json({ message: "التصنيف غير موجود" });
+      }
+      
+      res.json({ message: "تم حذف التصنيف بنجاح" });
+    } catch (error) {
+      console.error("Error deleting category:", error);
+      res.status(500).json({ message: "حدث خطأ أثناء حذف التصنيف" });
+    }
+  });
+
+  // Template CRUD operations (admin only)
+  app.post("/api/admin/templates", isAdmin, upload.single('image'), async (req, res) => {
+    try {
+      if (!req.body.templateData) {
+        console.error("Missing templateData in request");
+        return res.status(400).json({ message: "بيانات القالب مفقودة" });
+      }
+      
+      let templateData;
+      try {
+        templateData = JSON.parse(req.body.templateData);
+      } catch (error) {
+        console.error("Error parsing templateData:", error, "Raw templateData:", req.body.templateData);
+        return res.status(400).json({ message: "خطأ في تنسيق بيانات القالب" });
+      }
+      
+      if (req.file) {
+        // Move the uploaded file to the uploads directory
+        const filename = path.basename(req.file.path);
+        const targetPath = path.join(uploadsDir, filename);
+        
+        fs.copyFileSync(req.file.path, targetPath);
+        fs.unlinkSync(req.file.path); // Remove the temp file
+        
+        templateData.imageUrl = `/uploads/${filename}`;
+      }
+      
+      const validatedData = insertTemplateSchema.parse(templateData);
+      const template = await storage.createTemplate(validatedData);
+      
+      // Create template fields if provided
+      if (templateData.templateFields && Array.isArray(templateData.templateFields)) {
+        for (const field of templateData.templateFields) {
+          await storage.createTemplateField({
+            ...field,
+            templateId: template.id
+          });
+        }
+      }
+      
+      res.status(201).json(template);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ 
+          message: "بيانات غير صالحة", 
+          errors: error.errors 
+        });
+      }
+      console.error("Error creating template:", error);
+      res.status(500).json({ message: "حدث خطأ أثناء إنشاء القالب" });
+    }
+  });
+
+  app.put("/api/admin/templates/:id", isAdmin, upload.single('image'), async (req, res) => {
+    try {
+      const { id } = req.params;
+      
+      if (!req.body.templateData) {
+        console.error("Missing templateData in request");
+        return res.status(400).json({ message: "بيانات القالب مفقودة" });
+      }
+      
+      let templateData;
+      try {
+        templateData = JSON.parse(req.body.templateData);
+      } catch (error) {
+        console.error("Error parsing templateData:", error, "Raw templateData:", req.body.templateData);
+        return res.status(400).json({ message: "خطأ في تنسيق بيانات القالب" });
+      }
+      
+      if (req.file) {
+        // Move the uploaded file to the uploads directory
+        const filename = path.basename(req.file.path);
+        const targetPath = path.join(uploadsDir, filename);
+        
+        fs.copyFileSync(req.file.path, targetPath);
+        fs.unlinkSync(req.file.path); // Remove the temp file
+        
+        templateData.imageUrl = `/uploads/${filename}`;
+      }
+      
+      const template = await storage.updateTemplate(parseInt(id), templateData);
+      
+      if (!template) {
+        return res.status(404).json({ message: "القالب غير موجود" });
+      }
+      
+      res.json(template);
+    } catch (error) {
+      console.error("Error updating template:", error);
+      res.status(500).json({ message: "حدث خطأ أثناء تحديث القالب" });
+    }
+  });
+
+  app.delete("/api/admin/templates/:id", isAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const success = await storage.deleteTemplate(parseInt(id));
+      
+      if (!success) {
+        return res.status(404).json({ message: "القالب غير موجود" });
+      }
+      
+      res.json({ message: "تم حذف القالب بنجاح" });
+    } catch (error) {
+      console.error("Error deleting template:", error);
+      res.status(500).json({ message: "حدث خطأ أثناء حذف القالب" });
+    }
+  });
+
+  // Template Fields CRUD operations (admin only)
+  app.post("/api/admin/template-fields", isAdmin, async (req, res) => {
+    try {
+      const validatedData = insertTemplateFieldSchema.parse(req.body);
+      const field = await storage.createTemplateField(validatedData);
+      res.status(201).json(field);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ 
+          message: "بيانات غير صالحة", 
+          errors: error.errors 
+        });
+      }
+      console.error("Error creating template field:", error);
+      res.status(500).json({ message: "حدث خطأ أثناء إنشاء حقل القالب" });
+    }
+  });
+
+  app.put("/api/admin/template-fields/:id", isAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const field = await storage.updateTemplateField(parseInt(id), req.body);
+      
+      if (!field) {
+        return res.status(404).json({ message: "حقل القالب غير موجود" });
+      }
+      
+      res.json(field);
+    } catch (error) {
+      console.error("Error updating template field:", error);
+      res.status(500).json({ message: "حدث خطأ أثناء تحديث حقل القالب" });
+    }
+  });
+
+  app.delete("/api/admin/template-fields/:id", isAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const success = await storage.deleteTemplateField(parseInt(id));
+      
+      if (!success) {
+        return res.status(404).json({ message: "حقل القالب غير موجود" });
+      }
+      
+      res.json({ message: "تم حذف حقل القالب بنجاح" });
+    } catch (error) {
+      console.error("Error deleting template field:", error);
+      res.status(500).json({ message: "حدث خطأ أثناء حذف حقل القالب" });
+    }
+  });
+
+  // Font CRUD operations (admin only)
+  app.post("/api/admin/fonts", isAdmin, async (req, res) => {
+    try {
+      const validatedData = insertFontSchema.parse(req.body);
+      const font = await storage.createFont(validatedData);
+      res.status(201).json(font);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ 
+          message: "بيانات غير صالحة", 
+          errors: error.errors 
+        });
+      }
+      console.error("Error creating font:", error);
+      res.status(500).json({ message: "حدث خطأ أثناء إنشاء الخط" });
+    }
+  });
+
+  app.put("/api/admin/fonts/:id", isAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const font = await storage.updateFont(parseInt(id), req.body);
+      
+      if (!font) {
+        return res.status(404).json({ message: "الخط غير موجود" });
+      }
+      
+      res.json(font);
+    } catch (error) {
+      console.error("Error updating font:", error);
+      res.status(500).json({ message: "حدث خطأ أثناء تحديث الخط" });
+    }
+  });
+
+  app.delete("/api/admin/fonts/:id", isAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const success = await storage.deleteFont(parseInt(id));
+      
+      if (!success) {
+        return res.status(404).json({ message: "الخط غير موجود" });
+      }
+      
+      res.json({ message: "تم حذف الخط بنجاح" });
+    } catch (error) {
+      console.error("Error deleting font:", error);
+      res.status(500).json({ message: "حدث خطأ أثناء حذف الخط" });
+    }
+  });
+
+  // Settings CRUD operations (admin only)
+  app.get("/api/admin/settings", isAdmin, async (req, res) => {
+    try {
+      const category = req.query.category as string;
+      
+      if (category) {
+        const settings = await storage.getSettingsByCategory(category);
+        res.json(settings);
+      } else {
+        // Get all settings by getting all categories and then getting settings for each category
+        const generalSettings = await storage.getSettingsByCategory('general');
+        const emailSettings = await storage.getSettingsByCategory('email');
+        const templateSettings = await storage.getSettingsByCategory('template');
+        
+        res.json([...generalSettings, ...emailSettings, ...templateSettings]);
+      }
+    } catch (error) {
+      console.error("Error fetching settings:", error);
+      res.status(500).json({ message: "حدث خطأ أثناء تحميل الإعدادات" });
+    }
+  });
+
+  app.post("/api/admin/settings", isAdmin, async (req, res) => {
+    try {
+      const validatedData = insertSettingSchema.parse({
+        ...req.body,
+        updatedBy: req.user.id
+      });
+      
+      const setting = await storage.createOrUpdateSetting(validatedData);
+      res.status(201).json(setting);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ 
+          message: "بيانات غير صالحة", 
+          errors: error.errors 
+        });
+      }
+      console.error("Error creating/updating setting:", error);
+      res.status(500).json({ message: "حدث خطأ أثناء إنشاء/تحديث الإعداد" });
+    }
+  });
+
+  app.delete("/api/admin/settings/:key", isAdmin, async (req, res) => {
+    try {
+      const { key } = req.params;
+      const success = await storage.deleteSetting(key);
+      
+      if (!success) {
+        return res.status(404).json({ message: "الإعداد غير موجود" });
+      }
+      
+      res.json({ message: "تم حذف الإعداد بنجاح" });
+    } catch (error) {
+      console.error("Error deleting setting:", error);
+      res.status(500).json({ message: "حدث خطأ أثناء حذف الإعداد" });
+    }
+  });
+
+  // Manage users (admin only)
+  app.put("/api/admin/users/:id", isAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { role, active, name, email } = req.body;
+      
+      // Check if user exists
+      const user = await storage.getUser(parseInt(id));
+      
+      if (!user) {
+        return res.status(404).json({ message: "المستخدم غير موجود" });
+      }
+      
+      // Update user
+      const updatedUser = await storage.updateUser(parseInt(id), { 
+        role, active, name, email 
+      });
+      
+      if (!updatedUser) {
+        return res.status(404).json({ message: "المستخدم غير موجود" });
+      }
+      
+      // Remove password from response
+      const { password, ...userWithoutPassword } = updatedUser;
+      
+      res.json(userWithoutPassword);
+    } catch (error) {
+      console.error("Error updating user:", error);
+      res.status(500).json({ message: "حدث خطأ أثناء تحديث المستخدم" });
+    }
+  });
+
+  app.delete("/api/admin/users/:id", isAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      
+      // Don't allow deleting the last admin
+      const adminUsers = (await storage.getAllUsers()).users.filter(u => u.role === 'admin');
+      
+      if (adminUsers.length === 1 && adminUsers[0].id === parseInt(id)) {
+        return res.status(400).json({ message: "لا يمكن حذف آخر مستخدم بصلاحيات مدير" });
+      }
+      
+      const success = await storage.deleteUser(parseInt(id));
+      
+      if (!success) {
+        return res.status(404).json({ message: "المستخدم غير موجود" });
+      }
+      
+      res.json({ message: "تم حذف المستخدم بنجاح" });
+    } catch (error) {
+      console.error("Error deleting user:", error);
+      res.status(500).json({ message: "حدث خطأ أثناء حذف المستخدم" });
+    }
+  });
+
+  // System stats (admin only)
+  app.get("/api/admin/stats", isAdmin, async (req, res) => {
+    try {
+      const totalUsers = (await storage.getAllUsers()).total;
+      const categories = await storage.getAllCategories();
+      const { templates, total: totalTemplates } = await storage.getAllTemplates();
+      
+      // Count cards and certificates
+      let totalCards = 0;
+      let totalCertificates = 0;
+      
+      try {
+        const userCardsResult = await storage.getAllCards({ limit: 1, offset: 0 });
+        totalCards = userCardsResult.total;
+      } catch (error) {
+        console.error("Error counting cards:", error);
+      }
+      
+      try {
+        const userCertificatesResult = await storage.getAllCertificates({ limit: 1, offset: 0 });
+        totalCertificates = userCertificatesResult.total;
+      } catch (error) {
+        console.error("Error counting certificates:", error);
+      }
+      
+      res.json({
+        totalUsers,
+        totalCategories: categories.length,
+        totalTemplates,
+        totalCards,
+        totalCertificates,
+        
+        // Some recent activity
+        recentUsers: (await storage.getAllUsers({ limit: 5 })).users.map(u => {
+          const { password, ...userWithoutPassword } = u;
+          return userWithoutPassword;
+        }),
+        recentTemplates: templates.slice(0, 5)
+      });
+    } catch (error) {
+      console.error("Error fetching stats:", error);
+      res.status(500).json({ message: "حدث خطأ أثناء تحميل الإحصائيات" });
+    }
+  });
+
+  // مسارات قوالب الشهادات - Certificate template routes
+  app.get("/api/certificate-templates/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      let template;
+
+      // إذا كان المعرف هو "new"، استرجع قالب الشهادات الافتراضي
+      if (id === "new") {
+        const certificateTemplates = await storage.getTemplatesByCategory(1, { active: true });
+        template = certificateTemplates.length > 0 ? certificateTemplates[0] : null;
+      } else {
+        template = await storage.getTemplate(parseInt(id));
+      }
+      
+      if (!template) {
+        return res.status(404).json({ message: "القالب غير موجود" });
+      }
+      
+      res.json(template);
+    } catch (error) {
+      console.error("Error fetching certificate template:", error);
+      res.status(500).json({ message: "حدث خطأ أثناء تحميل قالب الشهادة" });
+    }
+  });
+  
+  app.get("/api/certificate-templates/:id/fields", async (req, res) => {
+    try {
+      const { id } = req.params;
+      let templateId;
+
+      // إذا كان المعرف هو "new"، استرجع حقول قالب الشهادات الافتراضي
+      if (id === "new") {
+        const certificateTemplates = await storage.getTemplatesByCategory(1, { active: true });
+        templateId = certificateTemplates.length > 0 ? certificateTemplates[0].id : null;
+      } else {
+        templateId = parseInt(id);
+      }
+      
+      if (!templateId) {
+        return res.status(404).json({ message: "القالب غير موجود" });
+      }
+      
+      const fields = await storage.getTemplateFields(templateId);
+      res.json(fields);
+    } catch (error) {
+      console.error("Error fetching certificate template fields:", error);
+      res.status(500).json({ message: "حدث خطأ أثناء تحميل حقول قالب الشهادة" });
+    }
+  });
+
+  // Serve uploaded card images and files
+  app.use("/uploads", express.static(uploadsDir));
+
+  // Create HTTP server
+  const httpServer = createServer(app);
+  return httpServer;
+}
