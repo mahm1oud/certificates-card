@@ -192,6 +192,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ message: "حدث خطأ أثناء تحميل القالب" });
     }
   });
+  
+  // Get template by just ID (for admin edit form)
+  app.get("/api/templates/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      console.log(`Looking for template with ID: ${id}`);
+      
+      const template = await storage.getTemplate(Number(id));
+      
+      if (!template) {
+        console.log(`Template not found with ID: ${id}`);
+        return res.status(404).json({ message: "القالب غير موجود" });
+      }
+      
+      console.log(`Template found: ${template.title}, ID: ${template.id}`);
+      
+      // Get template fields
+      const fields = await storage.getTemplateFields(template.id);
+      
+      res.json({ ...template, templateFields: fields });
+    } catch (error) {
+      console.error("Error fetching template:", error);
+      res.status(500).json({ message: "حدث خطأ أثناء تحميل القالب" });
+    }
+  });
 
   // Get fonts (public)
   app.get("/api/fonts", async (req, res) => {
@@ -771,10 +796,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
         templateData.imageUrl = `/uploads/${filename}`;
       }
       
+      // Validate the template data before updating
+      try {
+        insertTemplateSchema.parse(templateData);
+      } catch (error) {
+        if (error instanceof z.ZodError) {
+          console.error("Validation error:", error.errors);
+          return res.status(400).json({ 
+            message: "بيانات غير صالحة", 
+            errors: error.errors 
+          });
+        }
+        throw error;
+      }
+      
       const template = await storage.updateTemplate(parseInt(id), templateData);
       
       if (!template) {
         return res.status(404).json({ message: "القالب غير موجود" });
+      }
+      
+      // Update template fields if provided
+      if (templateData.templateFields && Array.isArray(templateData.templateFields)) {
+        // Delete existing fields and create new ones
+        for (const field of templateData.templateFields) {
+          if (field.id) {
+            // Update existing field
+            await storage.updateTemplateField(field.id, field);
+          } else {
+            // Create new field
+            await storage.createTemplateField({
+              ...field,
+              templateId: template.id
+            });
+          }
+        }
       }
       
       res.json(template);
@@ -814,6 +870,67 @@ export async function registerRoutes(app: Express): Promise<Server> {
         });
       }
       console.error("Error creating template field:", error);
+      res.status(500).json({ message: "حدث خطأ أثناء إنشاء حقل القالب" });
+    }
+  });
+  
+  // Get all fields for a template
+  app.get("/api/templates/:id/fields", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const templateId = parseInt(id);
+      
+      if (isNaN(templateId)) {
+        return res.status(400).json({ message: "رقم القالب غير صالح" });
+      }
+      
+      // Check if template exists
+      const template = await storage.getTemplate(templateId);
+      
+      if (!template) {
+        return res.status(404).json({ message: "القالب غير موجود" });
+      }
+      
+      const fields = await storage.getTemplateFields(templateId);
+      res.json(fields);
+    } catch (error) {
+      console.error("Error fetching template fields:", error);
+      res.status(500).json({ message: "حدث خطأ أثناء تحميل حقول القالب" });
+    }
+  });
+
+  // Add a new template field to a template
+  app.post("/api/templates/:id/fields", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const templateId = parseInt(id);
+      
+      // Check if template exists
+      const template = await storage.getTemplate(templateId);
+      
+      if (!template) {
+        return res.status(404).json({ message: "القالب غير موجود" });
+      }
+      
+      // Add template ID to the field data
+      const fieldData = {
+        ...req.body,
+        templateId
+      };
+      
+      // Validate and create field
+      const validatedData = insertTemplateFieldSchema.parse(fieldData);
+      const field = await storage.createTemplateField(validatedData);
+      
+      res.status(201).json(field);
+    } catch (error) {
+      console.error("Error creating template field:", error);
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ 
+          message: "بيانات غير صالحة",
+          errors: error.errors 
+        });
+      }
       res.status(500).json({ message: "حدث خطأ أثناء إنشاء حقل القالب" });
     }
   });
