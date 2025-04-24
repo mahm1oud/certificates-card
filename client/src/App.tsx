@@ -1,0 +1,104 @@
+import { Switch, Route } from "wouter";
+import { queryClient } from "./lib/queryClient";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { Toaster } from "@/components/ui/toaster";
+import { TooltipProvider } from "@/components/ui/tooltip";
+import NotFound from "@/pages/not-found";
+import Home from "@/pages/home";
+import TemplateForm from "@/pages/template-form";
+import CardPreview from "@/pages/card-preview";
+import FullCardView from "@/pages/full-card-view";
+import Header from "@/components/header";
+import Footer from "@/components/footer";
+import { AuthProvider } from "@/hooks/use-auth";
+import { ProtectedRoute } from "@/lib/protected-route";
+import { lazy, Suspense } from "react";
+import { Loader2 } from "lucide-react";
+
+// Lazy load admin and auth pages
+const AuthPage = lazy(() => import("@/pages/auth-page"));
+const AdminDashboard = lazy(() => import("@/pages/admin/dashboard"));
+const AdminCategories = lazy(() => import("@/pages/admin/categories"));
+const AdminTemplates = lazy(() => import("@/pages/admin/templates"));
+const AdminTemplateEdit = lazy(() => import("@/pages/admin/template-edit"));
+const AdminTemplateFields = lazy(() => import("@/pages/admin/template-fields"));
+const AdminUsers = lazy(() => import("@/pages/admin/users"));
+const AdminCards = lazy(() => import("@/pages/admin/cards"));
+const AdminCertificates = lazy(() => import("@/pages/admin/certificates"));
+const AdminSettings = lazy(() => import("@/pages/admin/settings"));
+const UserDashboard = lazy(() => import("@/pages/user/dashboard"));
+const UserCards = lazy(() => import("@/pages/user/cards"));
+const UserCertificates = lazy(() => import("@/pages/user/certificates"));
+const UserProfile = lazy(() => import("@/pages/user/profile"));
+const CertificateVerify = lazy(() => import("@/pages/certificate-verify"));
+const CertificateForm = lazy(() => import("@/pages/certificate-form"));
+const CertificatePreview = lazy(() => import("@/pages/certificate-preview"));
+const FullCertificateView = lazy(() => import("@/pages/full-certificate-view"));
+
+// Loading component for lazy loaded routes
+const LazyLoadingFallback = () => (
+  <div className="flex items-center justify-center min-h-screen">
+    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+  </div>
+);
+
+function Router() {
+  return (
+    <div dir="rtl" className="flex flex-col min-h-screen">
+      <Header />
+      <main className="flex-grow">
+        <Suspense fallback={<LazyLoadingFallback />}>
+          <Switch>
+            {/* Public routes */}
+            <Route path="/" component={Home} />
+            <Route path="/cards/:category/:templateId" component={TemplateForm} />
+            <Route path="/preview/:category/:templateId/:cardId" component={CardPreview} />
+            <Route path="/view/:cardId" component={FullCardView} />
+            <Route path="/auth" component={AuthPage} />
+            <Route path="/certificates/verify/:code" component={CertificateVerify} />
+            <Route path="/certificates/:templateId" component={CertificateForm} />
+            <Route path="/certificates/preview/:certificateId" component={CertificatePreview} />
+            <Route path="/certificate/:certificateId" component={FullCertificateView} />
+
+            {/* User routes (protected) */}
+            <ProtectedRoute path="/user/dashboard" component={UserDashboard} />
+            <ProtectedRoute path="/user/cards" component={UserCards} />
+            <ProtectedRoute path="/user/certificates" component={UserCertificates} />
+            <ProtectedRoute path="/user/profile" component={UserProfile} />
+            
+            {/* Admin routes (protected, admin only) */}
+            <ProtectedRoute path="/admin/dashboard" component={AdminDashboard} adminOnly />
+            <ProtectedRoute path="/admin/categories" component={AdminCategories} adminOnly />
+            <ProtectedRoute path="/admin/templates" component={AdminTemplates} adminOnly />
+            <ProtectedRoute path="/admin/templates/new" component={AdminTemplateEdit} adminOnly />
+            <ProtectedRoute path="/admin/templates/:templateId" component={AdminTemplateEdit} adminOnly />
+            <ProtectedRoute path="/admin/templates/:templateId/fields" component={AdminTemplateFields} adminOnly />
+            <ProtectedRoute path="/admin/users" component={AdminUsers} adminOnly />
+            <ProtectedRoute path="/admin/cards" component={AdminCards} adminOnly />
+            <ProtectedRoute path="/admin/certificates" component={AdminCertificates} adminOnly />
+            <ProtectedRoute path="/admin/settings" component={AdminSettings} adminOnly />
+            
+            {/* 404 route */}
+            <Route component={NotFound} />
+          </Switch>
+        </Suspense>
+      </main>
+      <Footer />
+    </div>
+  );
+}
+
+function App() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>
+        <AuthProvider>
+          <Toaster />
+          <Router />
+        </AuthProvider>
+      </TooltipProvider>
+    </QueryClientProvider>
+  );
+}
+
+export default App;
