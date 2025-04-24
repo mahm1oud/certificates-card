@@ -294,9 +294,9 @@ export default function CertificateForm() {
   return (
     <div className="container mx-auto py-6">
       <div className="mb-6">
-        <Button variant="outline" size="sm" onClick={() => setLocation("/")}>
+        <Button variant="outline" size="sm" onClick={() => setLocation("/?tab=certificates")}>
           <ChevronLeft className="ml-2 h-4 w-4" />
-          العودة للرئيسية
+          العودة للقوالب
         </Button>
       </div>
       

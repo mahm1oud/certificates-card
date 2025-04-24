@@ -79,10 +79,13 @@ export default function UserCertificatesPage() {
   const [isCopied, setIsCopied] = useState(false);
 
   // Fetch user certificates
-  const { data: certificates, isLoading } = useQuery({
+  const { data, isLoading } = useQuery({
     queryKey: ["/api/user/certificates"],
     queryFn: getQueryFn({}),
   });
+  
+  // Safely access certificates array
+  const certificates = data?.certificates || [];
 
   // Delete certificate mutation
   const deleteCertificateMutation = useMutation({
@@ -176,7 +179,7 @@ export default function UserCertificatesPage() {
   };
 
   // Filter certificates
-  const filteredCertificates = certificates?.filter((certificate: Certificate) => {
+  const filteredCertificates = certificates.filter((certificate: Certificate) => {
     // Filter by search query
     const matchesSearch = searchQuery
       ? certificate.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -190,7 +193,7 @@ export default function UserCertificatesPage() {
       (selectedTab === "expired" && certificate.status === "expired");
 
     return matchesSearch && matchesStatus;
-  }) || [];
+  });
 
   // Group certificates by month and year
   const groupedCertificates = filteredCertificates.reduce((groups: Record<string, Certificate[]>, certificate: Certificate) => {
@@ -221,7 +224,7 @@ export default function UserCertificatesPage() {
           <p className="text-muted-foreground">الشهادات التي تم إصدارها لك</p>
         </div>
         <Button asChild>
-          <Link href="/">
+          <Link href="/?tab=certificates">
             إنشاء شهادة جديدة
           </Link>
         </Button>
@@ -239,12 +242,12 @@ export default function UserCertificatesPage() {
 
       <Tabs value={selectedTab} onValueChange={setSelectedTab}>
         <TabsList>
-          <TabsTrigger value="all">الكل ({certificates?.length || 0})</TabsTrigger>
+          <TabsTrigger value="all">الكل ({certificates.length || 0})</TabsTrigger>
           <TabsTrigger value="active">
-            نشطة ({certificates?.filter((c: Certificate) => c.status === "active").length || 0})
+            نشطة ({certificates.filter((c: Certificate) => c.status === "active").length || 0})
           </TabsTrigger>
           <TabsTrigger value="expired">
-            منتهية ({certificates?.filter((c: Certificate) => c.status === "expired").length || 0})
+            منتهية ({certificates.filter((c: Certificate) => c.status === "expired").length || 0})
           </TabsTrigger>
         </TabsList>
 
@@ -347,7 +350,7 @@ export default function UserCertificatesPage() {
                 لم يتم إصدار أي شهادات لك بعد
               </p>
               <Button asChild>
-                <Link href="/">
+                <Link href="/?tab=certificates">
                   استكشاف القوالب
                 </Link>
               </Button>

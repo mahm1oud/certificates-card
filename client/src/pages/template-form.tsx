@@ -75,7 +75,7 @@ const TemplateForm = () => {
           <Button
             variant="outline"
             className="mt-4"
-            onClick={() => setLocation("/")}
+            onClick={() => setLocation("/?tab=cards")}
           >
             العودة إلى القوالب
           </Button>
@@ -127,7 +127,7 @@ const TemplateForm = () => {
       <Button
         variant="ghost"
         className="mb-6 flex items-center text-primary hover:text-primary/80 font-medium"
-        onClick={() => setLocation("/")}
+        onClick={() => setLocation("/?tab=cards")}
       >
         <i className="fas fa-arrow-right ml-2"></i>
         العودة إلى القوالب

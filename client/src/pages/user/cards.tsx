@@ -214,7 +214,7 @@ export default function UserCardsPage() {
           <p className="text-muted-foreground">البطاقات التي قمت بإنشائها</p>
         </div>
         <Button asChild>
-          <Link href="/">
+          <Link href="/?tab=cards">
             إنشاء بطاقة جديدة
           </Link>
         </Button>
@@ -340,7 +340,7 @@ export default function UserCardsPage() {
                 قم بإنشاء بطاقة جديدة للبدء
               </p>
               <Button asChild>
-                <Link href="/">
+                <Link href="/?tab=cards">
                   إنشاء بطاقة جديدة
                 </Link>
               </Button>

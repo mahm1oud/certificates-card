@@ -96,6 +96,9 @@ export default function TemplateEditPage() {
       }
       
       try {
+        // Include templateFields data if it exists
+        const templateFields = data.templateFields || [];
+        
         setFormData({
           id: data.id,
           title: data.title || '',
@@ -113,7 +116,8 @@ export default function TemplateEditPage() {
             textColor: '#000000',
             backgroundColor: '#ffffff'
           },
-          active: Boolean(data.active)
+          active: Boolean(data.active),
+          templateFields: templateFields
         });
         
         if (data.imageUrl) {
@@ -235,7 +239,8 @@ export default function TemplateEditPage() {
         active: Boolean(formData.active), // تأكد من تحويله إلى قيمة منطقية
         settings: formData.settings || {},
         fields: Array.isArray(formData.fields) ? formData.fields : [],
-        defaultValues: formData.defaultValues || {}
+        defaultValues: formData.defaultValues || {},
+        templateFields: formData.templateFields || []
       }));
       
       // Add image file if selected
