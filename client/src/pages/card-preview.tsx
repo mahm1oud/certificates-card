@@ -5,18 +5,112 @@ import { useState } from "react";
 import ShareOptions from "@/components/share-options";
 import { downloadImage } from "@/lib/utils";
 import { Loader2, Eye, Download, Share2, X } from "lucide-react";
+import { getQueryFn } from "@/lib/queryClient";
+
+// تعريف نوع البطاقة
+interface Card {
+  id: number;
+  publicId: string;
+  templateId: number;
+  categoryId: number;
+  imageUrl: string;
+  thumbnailUrl?: string;
+  status: string;
+  template?: {
+    id: number;
+    title: string;
+    titleAr?: string;
+    category?: {
+      id: number;
+      name: string;
+      nameAr?: string;
+      slug: string;
+    }
+  };
+  category?: {
+    id: number;
+    name: string;
+    nameAr?: string;
+    slug: string;
+  };
+}
 
 const CardPreview = () => {
-  const { cardId } = useParams();
+  const params = useParams();
+  const { category, templateId, cardId } = params;
+  console.log("URL Params:", params);
   const [_, setLocation] = useLocation();
   const [isShareOptionsVisible, setIsShareOptionsVisible] = useState(false);
   
+  // استخدام React Query لجلب بيانات البطاقة باستخدام الاستدعاء المباشر للحصول على استجابة JSON فقط
+  // في حالة استخدام fetch، يمكن تسليم HTML بدلاً من JSON إذا كان المصدر هو الصفحة المعروضة
+  const fetchCard = async (id: string) => {
+    try {
+      // إضافة معلمة timestamp لتفادي التخزين المؤقت
+      const timestamp = new Date().getTime();
+      const url = `/api/cards/${id}?_=${timestamp}`;
+      console.log("Fetching card data from URL:", url);
+      
+      const response = await fetch(url, {
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      console.log("API Response Status:", response.status);
+      console.log("API Response Headers:", JSON.stringify(Object.fromEntries([...response.headers]), null, 2));
+      
+      if (!response.ok) {
+        console.error("API Error:", response.status, response.statusText);
+        throw new Error(`API Error: ${response.status} ${response.statusText}`);
+      }
+      
+      // التحقق من نوع المحتوى
+      const contentType = response.headers.get('content-type');
+      console.log("Content-Type:", contentType);
+      
+      if (!contentType || !contentType.includes('application/json')) {
+        console.error("Invalid content type", contentType);
+        throw new Error("استجابة الخادم ليست من نوع JSON");
+      }
+      
+      const data = await response.json();
+      console.log("Card Data:", JSON.stringify(data, null, 2));
+      
+      if (!data || typeof data !== 'object') {
+        console.error("Invalid card data format:", data);
+        throw new Error("صيغة بيانات البطاقة غير صالحة");
+      }
+      
+      if (!data.imageUrl) {
+        console.error("Card data missing imageUrl:", data);
+        throw new Error("بيانات البطاقة غير مكتملة: رابط الصورة مفقود");
+      }
+      
+      return data as Card;
+    } catch (err) {
+      console.error("Error fetching card:", err);
+      throw err;
+    }
+  };
+  
+  // استخدام useQuery مع وظيفة الاستدعاء المخصصة
   const { data: card, isLoading, error } = useQuery({
-    queryKey: [`/api/cards/${cardId}`],
+    queryKey: [`card-${cardId}`],
+    queryFn: () => fetchCard(cardId || ''),
+    enabled: !!cardId,
+    retry: 1
   });
 
   const handleViewFullCard = () => {
-    setLocation(`/view/${cardId}`);
+    // استخدام المعرف العام (publicId) بدلاً من معرف البطاقة الداخلي
+    if (card && card.publicId) {
+      console.log(`Navigating to view card with publicId: ${card.publicId}`);
+      setLocation(`/view/${card.publicId}`);
+    } else {
+      console.error("Cannot view card: missing publicId");
+    }
   };
 
   const handleDownloadCard = () => {
@@ -61,7 +155,7 @@ const CardPreview = () => {
             variant="ghost"
             size="icon"
             className="text-neutral-500 hover:text-neutral-700"
-            onClick={() => setLocation(`/cards/${card.category?.slug || 'other'}/${card.templateId}`)}
+            onClick={() => setLocation(`/cards/${category || 'other'}/${templateId}`)}
           >
             <X className="h-5 w-5" />
           </Button>
@@ -107,7 +201,7 @@ const CardPreview = () => {
             </Button>
           </div>
           
-          {isShareOptionsVisible && (
+          {isShareOptionsVisible && cardId && (
             <ShareOptions cardId={cardId} />
           )}
         </div>

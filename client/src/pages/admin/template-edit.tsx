@@ -27,6 +27,7 @@ type Template = {
   defaultValues?: any;
   settings?: any;
   active: boolean;
+  templateFields?: any[];
 };
 
 type Category = {
@@ -67,61 +68,51 @@ export default function TemplateEditPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Fetch categories
-  const { data: categories, isLoading: isCategoriesLoading } = useQuery({
+  const { data: categoriesData, isLoading: isCategoriesLoading } = useQuery<Category[]>({
     queryKey: ["/api/categories"],
-    queryFn: getQueryFn({}),
-    onError: (error) => {
-      toast({
-        title: "خطأ في تحميل التصنيفات",
-        description: "حدث خطأ أثناء تحميل بيانات التصنيفات",
-        variant: "destructive",
-      });
-    }
+    queryFn: getQueryFn({ on401: "redirect-to-login" })
   });
+  
+  // Ensure categories is always an array 
+  const categories = categoriesData || [];
 
   // Fetch template details if editing
-  const { data: template, isLoading: isTemplateLoading } = useQuery({
+  const { data: templateData, isLoading: isTemplateLoading } = useQuery<Template>({
     queryKey: [`/api/templates/${templateId}`],
-    queryFn: getQueryFn({}),
-    enabled: isEditing,
-    onSuccess: (data) => {
-      console.log("تم تحميل بيانات القالب:", data);
-      if (!data) {
-        toast({
-          title: "خطأ في تحميل القالب",
-          description: "لم يتم العثور على بيانات القالب",
-          variant: "destructive",
-        });
-        return;
-      }
-      
+    queryFn: getQueryFn({ on401: "redirect-to-login" }),
+    enabled: isEditing
+  });
+  
+  // Update form data when template is loaded
+  useEffect(() => {
+    if (templateData) {
       try {
         // Include templateFields data if it exists
-        const templateFields = data.templateFields || [];
+        const templateFields = templateData.templateFields || [];
         
         setFormData({
-          id: data.id,
-          title: data.title || '',
-          titleAr: data.titleAr || '',
-          slug: data.slug || '',
-          categoryId: typeof data.categoryId === 'number' ? data.categoryId : 0,
-          imageUrl: data.imageUrl || '',
-          thumbnailUrl: data.thumbnailUrl || '',
-          displayOrder: typeof data.displayOrder === 'number' ? data.displayOrder : 0,
-          fields: Array.isArray(data.fields) ? data.fields : [],
-          defaultValues: data.defaultValues || {},
-          settings: data.settings || {
+          id: templateData.id,
+          title: templateData.title || '',
+          titleAr: templateData.titleAr || '',
+          slug: templateData.slug || '',
+          categoryId: typeof templateData.categoryId === 'number' ? templateData.categoryId : 0,
+          imageUrl: templateData.imageUrl || '',
+          thumbnailUrl: templateData.thumbnailUrl || '',
+          displayOrder: typeof templateData.displayOrder === 'number' ? templateData.displayOrder : 0,
+          fields: Array.isArray(templateData.fields) ? templateData.fields : [],
+          defaultValues: templateData.defaultValues || {},
+          settings: templateData.settings || {
             fontFamily: 'Tajawal',
             fontSize: 16,
             textColor: '#000000',
             backgroundColor: '#ffffff'
           },
-          active: Boolean(data.active),
+          active: Boolean(templateData.active),
           templateFields: templateFields
         });
         
-        if (data.imageUrl) {
-          setPreviewUrl(data.imageUrl);
+        if (templateData.imageUrl) {
+          setPreviewUrl(templateData.imageUrl);
         }
       } catch (err) {
         console.error("خطأ في معالجة بيانات القالب:", err);
@@ -131,16 +122,8 @@ export default function TemplateEditPage() {
           variant: "destructive",
         });
       }
-    },
-    onError: (error) => {
-      console.error("خطأ في تحميل القالب:", error);
-      toast({
-        title: "خطأ في تحميل القالب",
-        description: "حدث خطأ أثناء تحميل بيانات القالب",
-        variant: "destructive",
-      });
     }
-  });
+  }, [templateData, toast]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
@@ -240,7 +223,9 @@ export default function TemplateEditPage() {
         settings: formData.settings || {},
         fields: Array.isArray(formData.fields) ? formData.fields : [],
         defaultValues: formData.defaultValues || {},
-        templateFields: formData.templateFields || []
+        templateFields: formData.templateFields || [],
+        // إضافة imageUrl لتحديث القالب إذا لم يتم تحديث الصورة
+        imageUrl: formData.imageUrl || ''
       }));
       
       // Add image file if selected

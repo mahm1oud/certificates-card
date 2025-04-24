@@ -87,10 +87,10 @@ export default function UserCardsPage() {
   // Fetch user cards
   const { data: cardsData, isLoading } = useQuery({
     queryKey: ["/api/user/cards"],
-    queryFn: getQueryFn({}),
+    queryFn: getQueryFn({ on401: 'redirect-to-login' }),
   });
 
-  const cards = cardsData?.cards || [];
+  const cards = (cardsData?.cards || []) as Card[];
   const totalCards = cardsData?.total || 0;
 
   // Delete card mutation
@@ -214,7 +214,7 @@ export default function UserCardsPage() {
           <p className="text-muted-foreground">البطاقات التي قمت بإنشائها</p>
         </div>
         <Button asChild>
-          <Link href="/?tab=cards">
+          <Link href="/#templates">
             إنشاء بطاقة جديدة
           </Link>
         </Button>
@@ -340,7 +340,7 @@ export default function UserCardsPage() {
                 قم بإنشاء بطاقة جديدة للبدء
               </p>
               <Button asChild>
-                <Link href="/?tab=cards">
+                <Link href="/#templates">
                   إنشاء بطاقة جديدة
                 </Link>
               </Button>

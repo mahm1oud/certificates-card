@@ -8,7 +8,8 @@ import EngagementForm from "@/components/forms/engagement-form";
 import GraduationForm from "@/components/forms/graduation-form";
 import EidForm from "@/components/forms/eid-form";
 import RamadanForm from "@/components/forms/ramadan-form";
-import { apiRequest } from "@/lib/queryClient";
+import CustomForm from "@/components/forms/custom-form";
+import { apiRequest, getQueryFn } from "@/lib/queryClient";
 import { getCategoryName } from "@/lib/utils";
 
 const TemplateForm = () => {
@@ -16,18 +17,19 @@ const TemplateForm = () => {
   const [_, setLocation] = useLocation();
   const { toast } = useToast();
   
+  // جلب بيانات القالب
   const { data: template, isLoading } = useQuery({
     queryKey: [`/api/templates/${category}/${templateId}`],
+    queryFn: getQueryFn({ on401: "redirect-to-login" }),
     enabled: !!category && !!templateId,
-    retry: 3,
-    onError: (error) => {
-      console.error("Error fetching template:", error);
-      toast({
-        title: "خطأ في تحميل القالب",
-        description: "حدث خطأ أثناء تحميل القالب، يرجى المحاولة مرة أخرى",
-        variant: "destructive",
-      });
-    }
+    retry: 3
+  });
+  
+  // جلب الحقول المخصصة للقالب
+  const { data: templateFields, isLoading: isLoadingFields } = useQuery({
+    queryKey: [`/api/admin/template-fields/${templateId}`],
+    queryFn: getQueryFn({ on401: "redirect-to-login" }),
+    enabled: !!templateId,
   });
   
   const [formData, setFormData] = useState({});
@@ -60,7 +62,7 @@ const TemplateForm = () => {
   };
 
   const renderFormByCategory = () => {
-    if (isLoading) {
+    if (isLoading || isLoadingFields) {
       return <div className="p-6 text-center">جاري تحميل القالب...</div>;
     }
     
@@ -82,8 +84,20 @@ const TemplateForm = () => {
         </div>
       );
     }
+    
+    // إذا كان لدينا حقول مخصصة للقالب، نستخدم نموذج مخصص
+    if (templateFields && Array.isArray(templateFields) && templateFields.length > 0) {
+      console.log("Using custom form with template fields:", templateFields);
+      return <CustomForm 
+        onChange={handleFormChange} 
+        template={{
+          ...template as any, 
+          templateFields: templateFields
+        }} 
+      />;
+    }
 
-    // تحديد نوع النموذج المناسب
+    // إذا لم يكن لدينا حقول مخصصة، نستخدم النموذج الافتراضي حسب الفئة
     let CategoryForm;
     switch (category) {
       case "wedding":
@@ -112,7 +126,7 @@ const TemplateForm = () => {
 
     // تأكد من وجود النموذج قبل عرضه
     if (CategoryForm) {
-      return <CategoryForm onChange={handleFormChange} template={template} />;
+      return <CategoryForm onChange={handleFormChange} template={template as any} />;
     }
 
     return (
@@ -141,8 +155,8 @@ const TemplateForm = () => {
               <div className="absolute inset-0 flex items-center justify-center">جاري التحميل...</div>
             ) : (
               <img 
-                src={template?.imageUrl} 
-                alt={template?.title} 
+                src={(template as any)?.imageUrl} 
+                alt={(template as any)?.title} 
                 className="absolute inset-0 w-full h-full object-contain"
               />
             )}

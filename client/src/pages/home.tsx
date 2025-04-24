@@ -48,22 +48,27 @@ export default function HomePage() {
   // Fetch categories
   const { data: categories, isLoading: isCategoriesLoading } = useQuery({
     queryKey: ["/api/categories"],
-    queryFn: getQueryFn({}),
+    queryFn: getQueryFn({ on401: "redirect-to-login" }),
   });
   
-  // Fetch card templates
-  const { data: cardTemplates, isLoading: isCardTemplatesLoading } = useQuery({
+  // Fetch all templates
+  const { data: allTemplates, isLoading: isTemplatesLoading } = useQuery({
     queryKey: [selectedCategory === "all" ? "/api/templates" : `/api/categories/${selectedCategory}/templates`],
-    queryFn: getQueryFn({}),
-    enabled: selectedTab === "cards"
+    queryFn: getQueryFn({ on401: "redirect-to-login" }),
   });
   
-  // Fetch certificate templates
-  const { data: certificateTemplates, isLoading: isCertificateTemplatesLoading } = useQuery({
-    queryKey: ["/api/certificate-templates"],
-    queryFn: getQueryFn({}),
-    enabled: selectedTab === "certificates"
-  });
+  // Filter templates by type (card or certificate)
+  const cardTemplates = {
+    templates: (allTemplates?.templates || []).filter((template: any) => 
+      !template.certificateType || template.certificateType === 'card'
+    )
+  };
+  
+  const certificateTemplates = {
+    templates: (allTemplates?.templates || []).filter((template: any) => 
+      template.certificateType && template.certificateType !== 'card'
+    )
+  };
   
   // Update URL when category or tab changes
   useEffect(() => {
@@ -108,10 +113,7 @@ export default function HomePage() {
     }
   };
   
-  const isLoading = 
-    isCategoriesLoading || 
-    (selectedTab === "cards" && isCardTemplatesLoading) || 
-    (selectedTab === "certificates" && isCertificateTemplatesLoading);
+  const isLoading = isCategoriesLoading || isTemplatesLoading;
   
   return (
     <div className="container mx-auto py-6 space-y-8">

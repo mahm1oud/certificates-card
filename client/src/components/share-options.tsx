@@ -4,7 +4,7 @@ import { Share, Copy, Check } from "lucide-react";
 import { useState } from "react";
 
 interface ShareOptionsProps {
-  cardId: string;
+  cardId?: string;
   cardType?: 'card' | 'certificate';
 }
 
@@ -14,7 +14,7 @@ const ShareOptions = ({ cardId, cardType = 'card' }: ShareOptionsProps) => {
   
   // Determine the view path based on the card type
   const viewPath = cardType === 'certificate' ? 'certificate' : 'view';
-  const shareUrl = `${window.location.origin}/${viewPath}/${cardId}`;
+  const shareUrl = cardId ? `${window.location.origin}/${viewPath}/${cardId}` : window.location.href;
   
   console.log(`Share URL for ${cardType}: ${shareUrl}`);
   

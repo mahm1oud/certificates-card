@@ -3,6 +3,9 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useTemplateForm } from "@/hooks/use-template-form";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Checkbox } from "@/components/ui/checkbox";
 
 interface CustomFormProps {
   onChange: (data: any) => void;
@@ -10,13 +13,24 @@ interface CustomFormProps {
 }
 
 const CustomForm = ({ onChange, template }: CustomFormProps) => {
-  // التحقق من وجود الحقول المطلوبة في القالب
-  const templateFields = template?.fields || ["sender", "recipient", "message"];
+  // التحقق من وجود الحقول المخصصة في القالب
+  const customFields = template?.templateFields || [];
+  
+  // استخدام الحقول المخصصة من القالب إذا كانت متوفرة وإلا استخدم الحقول الافتراضية
+  const fields = customFields.length > 0 ? customFields : 
+    template?.fields ? template.fields.map((field: string) => ({
+      name: field,
+      label: getDefaultFieldLabel(field),
+      type: getDefaultFieldType(field),
+      required: isFieldRequired(field),
+      placeholder: getDefaultFieldPlaceholder(field),
+    })) : [];
   
   // إنشاء حالة افتراضية تعتمد على الحقول المتاحة في القالب
-  const initialState: Record<string, string> = {};
-  templateFields.forEach((field: string) => {
-    initialState[field] = "";
+  const initialState: Record<string, any> = {};
+  fields.forEach((field: any) => {
+    // استخدام القيم الافتراضية إذا كانت موجودة
+    initialState[field.name] = field.defaultValue || "";
   });
 
   const { formData, updateFormField } = useTemplateForm(initialState);
@@ -25,128 +39,172 @@ const CustomForm = ({ onChange, template }: CustomFormProps) => {
     onChange(formData);
   }, [formData, onChange]);
 
-  // رسم حقول النموذج بشكل ديناميكي بناءً على الحقول المحددة في القالب
+  // رسم حقل استنادًا إلى نوعه
+  const renderField = (field: any) => {
+    const fieldType = field.type || "text";
+    const required = field.required || false;
+    
+    switch (fieldType) {
+      case "text":
+        return (
+          <Input
+            id={field.name}
+            name={field.name}
+            placeholder={field.placeholder || ""}
+            value={formData[field.name] || ""}
+            onChange={(e) => updateFormField(field.name, e.target.value)}
+            required={required}
+            className="rtl"
+          />
+        );
+      
+      case "textarea":
+        return (
+          <Textarea
+            id={field.name}
+            name={field.name}
+            placeholder={field.placeholder || ""}
+            value={formData[field.name] || ""}
+            onChange={(e) => updateFormField(field.name, e.target.value)}
+            required={required}
+            className="rtl"
+          />
+        );
+      
+      case "select":
+        return (
+          <Select
+            value={formData[field.name] || ""}
+            onValueChange={(value) => updateFormField(field.name, value)}
+            required={required}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder={field.placeholder || "اختر..."} />
+            </SelectTrigger>
+            <SelectContent>
+              {field.options?.map((option: any) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        );
+      
+      case "radio":
+        return (
+          <RadioGroup
+            value={formData[field.name] || ""}
+            onValueChange={(value) => updateFormField(field.name, value)}
+            required={required}
+            className="space-y-2"
+          >
+            {field.options?.map((option: any) => (
+              <div key={option.value} className="flex items-center space-x-2 space-x-reverse">
+                <RadioGroupItem id={`${field.name}-${option.value}`} value={option.value} />
+                <Label htmlFor={`${field.name}-${option.value}`}>{option.label}</Label>
+              </div>
+            ))}
+          </RadioGroup>
+        );
+      
+      case "checkbox":
+        return (
+          <div className="flex items-center space-x-2 space-x-reverse">
+            <Checkbox
+              id={field.name}
+              checked={formData[field.name] || false}
+              onCheckedChange={(checked) => updateFormField(field.name, checked)}
+            />
+            <Label htmlFor={field.name}>{field.label}</Label>
+          </div>
+        );
+      
+      case "date":
+        return (
+          <Input
+            id={field.name}
+            name={field.name}
+            type="date"
+            value={formData[field.name] || ""}
+            onChange={(e) => updateFormField(field.name, e.target.value)}
+            required={required}
+          />
+        );
+      
+      default:
+        return (
+          <Input
+            id={field.name}
+            name={field.name}
+            placeholder={field.placeholder || ""}
+            value={formData[field.name] || ""}
+            onChange={(e) => updateFormField(field.name, e.target.value)}
+            required={required}
+            className="rtl"
+          />
+        );
+    }
+  };
+
+  // وظائف مساعدة للتعامل مع الحقول الافتراضية
+  function getDefaultFieldLabel(fieldName: string): string {
+    switch (fieldName) {
+      case "sender": return "اسم المرسل";
+      case "recipient": return "اسم المستلم";
+      case "message": return "رسالة البطاقة";
+      case "event": return "المناسبة";
+      case "date": return "التاريخ";
+      case "time": return "الوقت";
+      case "occasion": return "نوع المناسبة";
+      default: return fieldName;
+    }
+  }
+
+  function getDefaultFieldType(fieldName: string): string {
+    switch (fieldName) {
+      case "message": return "textarea";
+      case "date": return "date";
+      case "time": return "time";
+      default: return "text";
+    }
+  }
+
+  function isFieldRequired(fieldName: string): boolean {
+    switch (fieldName) {
+      case "sender": return true;
+      case "recipient": return true;
+      case "message": return true;
+      default: return false;
+    }
+  }
+
+  function getDefaultFieldPlaceholder(fieldName: string): string {
+    switch (fieldName) {
+      case "sender": return "أدخل اسمك";
+      case "recipient": return "أدخل اسم الشخص الذي تريد إرسال البطاقة له";
+      case "message": return "اكتب رسالتك هنا...";
+      case "event": return "أدخل اسم المناسبة";
+      case "occasion": return "أدخل نوع المناسبة";
+      default: return "";
+    }
+  }
+
+  // رسم الحقول الديناميكية بناء على التكوين
   return (
     <div className="space-y-4">
-      {templateFields.includes("sender") && (
-        <div className="form-group">
-          <Label htmlFor="sender" className="block text-sm font-medium text-neutral-700 mb-1">
-            اسم المرسل
+      {fields.map((field: any) => (
+        <div key={field.name} className="form-group">
+          <Label htmlFor={field.name} className="block text-sm font-medium mb-1">
+            {field.label}
+            {field.required && <span className="text-destructive mr-1">*</span>}
           </Label>
-          <Input
-            id="sender"
-            name="sender"
-            value={formData.sender || ""}
-            onChange={(e) => updateFormField("sender", e.target.value)}
-            className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary focus:border-primary"
-            placeholder="أدخل اسمك"
-            required
-          />
+          {renderField(field)}
+          {field.description && (
+            <p className="text-sm text-muted-foreground mt-1">{field.description}</p>
+          )}
         </div>
-      )}
-
-      {templateFields.includes("recipient") && (
-        <div className="form-group">
-          <Label htmlFor="recipient" className="block text-sm font-medium text-neutral-700 mb-1">
-            اسم المستلم
-          </Label>
-          <Input
-            id="recipient"
-            name="recipient"
-            value={formData.recipient || ""}
-            onChange={(e) => updateFormField("recipient", e.target.value)}
-            className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary focus:border-primary"
-            placeholder="أدخل اسم الشخص الذي تريد إرسال البطاقة له"
-            required
-          />
-        </div>
-      )}
-      
-      {templateFields.includes("message") && (
-        <div className="form-group">
-          <Label htmlFor="message" className="block text-sm font-medium text-neutral-700 mb-1">
-            رسالة البطاقة
-          </Label>
-          <Textarea
-            id="message"
-            name="message"
-            value={formData.message || ""}
-            onChange={(e) => updateFormField("message", e.target.value)}
-            rows={3}
-            className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary focus:border-primary"
-            placeholder="اكتب رسالتك هنا..."
-            required
-          />
-        </div>
-      )}
-      
-      {templateFields.includes("event") && (
-        <div className="form-group">
-          <Label htmlFor="event" className="block text-sm font-medium text-neutral-700 mb-1">
-            المناسبة
-          </Label>
-          <Input
-            id="event"
-            name="event"
-            value={formData.event || ""}
-            onChange={(e) => updateFormField("event", e.target.value)}
-            className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary focus:border-primary"
-            placeholder="أدخل اسم المناسبة"
-            required
-          />
-        </div>
-      )}
-      
-      {templateFields.includes("date") && (
-        <div className="form-group">
-          <Label htmlFor="date" className="block text-sm font-medium text-neutral-700 mb-1">
-            التاريخ
-          </Label>
-          <Input
-            id="date"
-            name="date"
-            type="date"
-            value={formData.date || ""}
-            onChange={(e) => updateFormField("date", e.target.value)}
-            className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary focus:border-primary"
-            required
-          />
-        </div>
-      )}
-      
-      {templateFields.includes("time") && (
-        <div className="form-group">
-          <Label htmlFor="time" className="block text-sm font-medium text-neutral-700 mb-1">
-            الوقت
-          </Label>
-          <Input
-            id="time"
-            name="time"
-            type="time"
-            value={formData.time || ""}
-            onChange={(e) => updateFormField("time", e.target.value)}
-            className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary focus:border-primary"
-            required
-          />
-        </div>
-      )}
-      
-      {templateFields.includes("occasion") && (
-        <div className="form-group">
-          <Label htmlFor="occasion" className="block text-sm font-medium text-neutral-700 mb-1">
-            المناسبة
-          </Label>
-          <Input
-            id="occasion"
-            name="occasion"
-            value={formData.occasion || ""}
-            onChange={(e) => updateFormField("occasion", e.target.value)}
-            className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary focus:border-primary"
-            placeholder="أدخل نوع المناسبة"
-            required
-          />
-        </div>
-      )}
+      ))}
     </div>
   );
 };

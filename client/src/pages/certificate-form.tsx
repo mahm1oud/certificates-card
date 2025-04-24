@@ -28,16 +28,16 @@ export default function CertificateForm() {
   const { toast } = useToast();
   
   // Fetch template data
-  const { data: template, isLoading } = useQuery({
+  const { data: template, isLoading } = useQuery<any>({
     queryKey: [`/api/certificate-templates/${templateId}`],
-    queryFn: getQueryFn({}),
+    queryFn: getQueryFn({ on401: "redirect-to-login" }),
     enabled: !!templateId
   });
   
   // Fetch template fields
-  const { data: templateFields, isLoading: isLoadingFields } = useQuery({
+  const { data: templateFields, isLoading: isLoadingFields } = useQuery<any[]>({
     queryKey: [`/api/certificate-templates/${templateId}/fields`],
-    queryFn: getQueryFn({}),
+    queryFn: getQueryFn({ on401: "redirect-to-login" }),
     enabled: !!templateId
   });
   
@@ -57,7 +57,7 @@ export default function CertificateForm() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!template) {
+    if (!template || Object.keys(template).length === 0) {
       toast({
         title: "خطأ",
         description: "لم يتم العثور على القالب",
@@ -73,7 +73,7 @@ export default function CertificateForm() {
         templateId: Number(templateId),
         formData: {
           ...formData,
-          certificateType: template.certificateType || "appreciation"
+          certificateType: (template as any).certificateType || "appreciation"
         }
       });
       
@@ -289,7 +289,7 @@ export default function CertificateForm() {
   ];
   
   // Use template fields if available, otherwise use default fields
-  const fields = (templateFields?.length > 0 ? templateFields : defaultFields) || [];
+  const fields = (templateFields && Array.isArray(templateFields) && templateFields.length > 0 ? templateFields : defaultFields) || [];
   
   return (
     <div className="container mx-auto py-6">
@@ -304,23 +304,23 @@ export default function CertificateForm() {
         <div>
           <div className="sticky top-6">
             <div className="bg-muted/50 p-4 rounded-lg mb-6">
-              <h2 className="text-xl font-bold">{template.title}</h2>
-              {template.titleAr && (
-                <p className="text-muted-foreground">{template.titleAr}</p>
+              <h2 className="text-xl font-bold">{(template as any)?.title || 'قالب شهادة'}</h2>
+              {(template as any)?.titleAr && (
+                <p className="text-muted-foreground">{(template as any).titleAr}</p>
               )}
               <p className="text-sm text-muted-foreground mt-2">
-                {template.certificateType === 'appreciation' && 'شهادة تقدير'}
-                {template.certificateType === 'training' && 'شهادة تدريب'}
-                {template.certificateType === 'education' && 'شهادة تعليم'}
-                {template.certificateType === 'teacher' && 'شهادة للمعلمين'}
+                {(template as any)?.certificateType === 'appreciation' && 'شهادة تقدير'}
+                {(template as any)?.certificateType === 'training' && 'شهادة تدريب'}
+                {(template as any)?.certificateType === 'education' && 'شهادة تعليم'}
+                {(template as any)?.certificateType === 'teacher' && 'شهادة للمعلمين'}
               </p>
             </div>
             
             <div className="bg-muted/50 aspect-[1.414/1] w-full rounded-lg overflow-hidden">
-              {template.imageUrl ? (
+              {(template as any)?.imageUrl ? (
                 <img 
-                  src={template.imageUrl} 
-                  alt={template.title} 
+                  src={(template as any).imageUrl} 
+                  alt={(template as any).title || 'قالب شهادة'} 
                   className="w-full h-full object-contain"
                 />
               ) : (

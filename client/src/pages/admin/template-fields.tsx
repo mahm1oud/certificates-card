@@ -12,8 +12,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, Plus, Save, ArrowLeft, Pencil, Trash2, XCircle, ChevronUp, ChevronDown } from "lucide-react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
+import { Loader2, Plus, Save, ArrowLeft, Pencil, Trash2, XCircle, ChevronUp, ChevronDown, Copy } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
 
 type TemplateField = {
@@ -57,6 +57,7 @@ export default function TemplateFieldsPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isCopyDialogOpen, setIsCopyDialogOpen] = useState(false);
   const [editingField, setEditingField] = useState<TemplateField | null>(null);
   const [fieldFormData, setFieldFormData] = useState<Partial<TemplateField>>({
     name: '',
@@ -71,37 +72,44 @@ export default function TemplateFieldsPage() {
     displayOrder: 0
   });
   const [newOption, setNewOption] = useState('');
+  const [sourceTemplateId, setSourceTemplateId] = useState<string>('');
+  const [selectedFields, setSelectedFields] = useState<number[]>([]);
+  const [selectAll, setSelectAll] = useState(false);
 
   // Fetch template details
-  const { data: template, isLoading: isTemplateLoading } = useQuery({
+  const { data: template, isLoading: isTemplateLoading } = useQuery<Template>({
     queryKey: [`/api/templates/${templateId}`],
-    queryFn: getQueryFn({}),
-    onError: (error) => {
-      toast({
-        title: "خطأ في تحميل القالب",
-        description: "حدث خطأ أثناء تحميل بيانات القالب",
-        variant: "destructive",
-      });
-    }
+    queryFn: getQueryFn({ on401: "redirect-to-login" }),
+    refetchOnWindowFocus: true
   });
 
   // Fetch template fields
-  const { data: fields, isLoading: isFieldsLoading, refetch: refetchFields } = useQuery({
-    queryKey: [`/api/templates/${templateId}/fields`],
-    queryFn: getQueryFn({}),
-    onError: (error) => {
-      toast({
-        title: "خطأ في تحميل الحقول",
-        description: "حدث خطأ أثناء تحميل حقول القالب",
-        variant: "destructive",
-      });
-    }
+  const { data: fields, isLoading: isFieldsLoading, refetch: refetchFields } = useQuery<TemplateField[]>({
+    queryKey: [`/api/admin/template-fields/${templateId}`],
+    queryFn: getQueryFn({ on401: "redirect-to-login" }),
+    // يتم التعامل مع الأخطاء بشكل داخلي من خلال getQueryFn
+    refetchOnWindowFocus: true
+  });
+  
+  // Fetch all templates for dropdown
+  const { data: allTemplates, isLoading: isAllTemplatesLoading } = useQuery<{id: number, title: string}[]>({
+    queryKey: ['/api/admin/templates-list'],
+    queryFn: getQueryFn({ on401: "redirect-to-login" }),
+    refetchOnWindowFocus: true
+  });
+  
+  // Fetch source template fields when sourceTemplateId changes
+  const { data: sourceFields, isLoading: isSourceFieldsLoading } = useQuery<TemplateField[]>({
+    queryKey: [`/api/admin/template-fields/${sourceTemplateId}`],
+    queryFn: getQueryFn({ on401: "redirect-to-login" }),
+    enabled: !!sourceTemplateId, // Only run query when sourceTemplateId exists
+    refetchOnWindowFocus: true
   });
 
   // Create field mutation
   const createFieldMutation = useMutation({
     mutationFn: async (data: any) => {
-      const res = await apiRequest("POST", `/api/templates/${templateId}/fields`, data);
+      const res = await apiRequest("POST", `/api/templates/${templateId}/fields`, data, { on401: "redirect-to-login" });
       return res.json();
     },
     onSuccess: () => {
@@ -124,7 +132,7 @@ export default function TemplateFieldsPage() {
   // Update field mutation
   const updateFieldMutation = useMutation({
     mutationFn: async (data: any) => {
-      const res = await apiRequest("PUT", `/api/admin/template-fields/${data.id}`, data);
+      const res = await apiRequest("PUT", `/api/admin/template-fields/${data.id}`, data, { on401: "redirect-to-login" });
       return res.json();
     },
     onSuccess: () => {
@@ -147,7 +155,7 @@ export default function TemplateFieldsPage() {
   // Delete field mutation
   const deleteFieldMutation = useMutation({
     mutationFn: async (id: number) => {
-      const res = await apiRequest("DELETE", `/api/admin/template-fields/${id}`);
+      const res = await apiRequest("DELETE", `/api/admin/template-fields/${id}`, null, { on401: "redirect-to-login" });
       return res.json();
     },
     onSuccess: () => {
@@ -179,6 +187,32 @@ export default function TemplateFieldsPage() {
     onError: (error) => {
       toast({
         title: "خطأ في إعادة ترتيب الحقل",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  });
+  
+  // Copy fields mutation
+  const copyFieldsMutation = useMutation({
+    mutationFn: async (data: { sourceTemplateId: string, targetTemplateId: string, fieldIds?: number[] }) => {
+      const res = await apiRequest("POST", "/api/admin/copy-template-fields", data, { on401: "redirect-to-login" });
+      return res.json();
+    },
+    onSuccess: (data) => {
+      setIsCopyDialogOpen(false);
+      setSourceTemplateId('');
+      setSelectedFields([]);
+      setSelectAll(false);
+      refetchFields();
+      toast({
+        title: "تم نسخ الحقول بنجاح",
+        description: data.message,
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "خطأ في نسخ الحقول",
         description: error.message,
         variant: "destructive",
       });
@@ -274,6 +308,139 @@ export default function TemplateFieldsPage() {
             <ArrowLeft className="ml-2 h-4 w-4" />
             العودة للقوالب
           </Button>
+          
+          <Dialog open={isCopyDialogOpen} onOpenChange={setIsCopyDialogOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline">
+                <Copy className="ml-2 h-4 w-4" />
+                نسخ الحقول
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[500px]">
+              <DialogHeader>
+                <DialogTitle>نسخ الحقول من قالب آخر</DialogTitle>
+                <DialogDescription>
+                  يمكنك نسخ حقول من قوالب أخرى إلى هذا القالب
+                </DialogDescription>
+              </DialogHeader>
+              
+              <div className="grid gap-4 py-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="sourceTemplate">القالب المصدر</Label>
+                  <Select 
+                    value={sourceTemplateId} 
+                    onValueChange={setSourceTemplateId}
+                  >
+                    <SelectTrigger id="sourceTemplate">
+                      <SelectValue placeholder="اختر القالب المصدر" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {allTemplates?.filter(t => t.id !== Number(templateId)).map(template => (
+                        <SelectItem key={template.id} value={String(template.id)}>
+                          {template.title}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                {sourceTemplateId && (
+                  <div className="grid gap-2">
+                    <div className="flex items-center justify-between">
+                      <Label>الحقول المتاحة للنسخ</Label>
+                      <div className="flex items-center gap-2">
+                        <Checkbox 
+                          id="selectAll" 
+                          checked={selectAll}
+                          onCheckedChange={(checked) => {
+                            setSelectAll(!!checked);
+                            if (checked && sourceFields) {
+                              setSelectedFields(sourceFields.map(field => field.id));
+                            } else {
+                              setSelectedFields([]);
+                            }
+                          }}
+                        />
+                        <Label htmlFor="selectAll">تحديد الكل</Label>
+                      </div>
+                    </div>
+                    
+                    {isSourceFieldsLoading ? (
+                      <div className="py-4 flex justify-center">
+                        <Loader2 className="h-5 w-5 animate-spin" />
+                      </div>
+                    ) : sourceFields?.length ? (
+                      <div className="border rounded-md max-h-[300px] overflow-y-auto">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead className="w-[50px]"></TableHead>
+                              <TableHead>الحقل</TableHead>
+                              <TableHead>النوع</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {sourceFields.map((field) => (
+                              <TableRow key={field.id}>
+                                <TableCell>
+                                  <Checkbox 
+                                    checked={selectedFields.includes(field.id)}
+                                    onCheckedChange={(checked) => {
+                                      if (checked) {
+                                        setSelectedFields([...selectedFields, field.id]);
+                                      } else {
+                                        setSelectedFields(selectedFields.filter(id => id !== field.id));
+                                      }
+                                    }}
+                                  />
+                                </TableCell>
+                                <TableCell>{field.label}</TableCell>
+                                <TableCell>
+                                  {field.type === 'text' && 'نص قصير'}
+                                  {field.type === 'textarea' && 'نص طويل'}
+                                  {field.type === 'number' && 'رقم'}
+                                  {field.type === 'date' && 'تاريخ'}
+                                  {field.type === 'select' && 'قائمة منسدلة'}
+                                  {field.type === 'radio' && 'خيارات متعددة'}
+                                  {field.type === 'checkbox' && 'اختيار (نعم/لا)'}
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground text-center py-4">
+                        لا توجد حقول في القالب المصدر
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+              
+              <DialogFooter>
+                <Button
+                  onClick={() => {
+                    copyFieldsMutation.mutate({
+                      sourceTemplateId,
+                      targetTemplateId: templateId as string,
+                      fieldIds: selectedFields.length ? selectedFields : undefined
+                    });
+                  }}
+                  disabled={!sourceTemplateId || copyFieldsMutation.isPending}
+                >
+                  {copyFieldsMutation.isPending ? (
+                    <Loader2 className="ml-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <>
+                      <Copy className="ml-2 h-4 w-4" />
+                      {selectedFields.length ? `نسخ ${selectedFields.length} حقل` : 'نسخ جميع الحقول'}
+                    </>
+                  )}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
           
           <Dialog open={isDialogOpen} onOpenChange={handleDialogClose}>
             <DialogTrigger asChild>

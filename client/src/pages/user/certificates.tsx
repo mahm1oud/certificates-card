@@ -81,11 +81,11 @@ export default function UserCertificatesPage() {
   // Fetch user certificates
   const { data, isLoading } = useQuery({
     queryKey: ["/api/user/certificates"],
-    queryFn: getQueryFn({}),
+    queryFn: getQueryFn({ on401: 'redirect-to-login' }),
   });
   
   // Safely access certificates array
-  const certificates = data?.certificates || [];
+  const certificates = (data?.certificates || []) as Certificate[];
 
   // Delete certificate mutation
   const deleteCertificateMutation = useMutation({
@@ -224,7 +224,7 @@ export default function UserCertificatesPage() {
           <p className="text-muted-foreground">الشهادات التي تم إصدارها لك</p>
         </div>
         <Button asChild>
-          <Link href="/?tab=certificates">
+          <Link href="/#templates?tab=certificates">
             إنشاء شهادة جديدة
           </Link>
         </Button>
@@ -350,7 +350,7 @@ export default function UserCertificatesPage() {
                 لم يتم إصدار أي شهادات لك بعد
               </p>
               <Button asChild>
-                <Link href="/?tab=certificates">
+                <Link href="/#templates?tab=certificates">
                   استكشاف القوالب
                 </Link>
               </Button>

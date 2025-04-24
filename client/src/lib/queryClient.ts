@@ -11,6 +11,9 @@ export async function apiRequest(
   method: string,
   url: string,
   data?: unknown | undefined,
+  options?: {
+    on401?: UnauthorizedBehavior;
+  }
 ): Promise<Response> {
   const res = await fetch(url, {
     method,
@@ -19,11 +22,20 @@ export async function apiRequest(
     credentials: "include",
   });
 
+  if (res.status === 401 && options?.on401) {
+    if (options.on401 === "returnNull") {
+      return res;
+    } else if (options.on401 === "redirect-to-login") {
+      window.location.href = "/auth";
+      return res;
+    }
+  }
+
   await throwIfResNotOk(res);
   return res;
 }
 
-type UnauthorizedBehavior = "returnNull" | "throw";
+type UnauthorizedBehavior = "returnNull" | "throw" | "redirect-to-login";
 export const getQueryFn: <T>(options: {
   on401: UnauthorizedBehavior;
 }) => QueryFunction<T> =
@@ -33,8 +45,13 @@ export const getQueryFn: <T>(options: {
       credentials: "include",
     });
 
-    if (unauthorizedBehavior === "returnNull" && res.status === 401) {
-      return null;
+    if (res.status === 401) {
+      if (unauthorizedBehavior === "returnNull") {
+        return null;
+      } else if (unauthorizedBehavior === "redirect-to-login") {
+        window.location.href = "/auth";
+        return null;
+      }
     }
 
     await throwIfResNotOk(res);
