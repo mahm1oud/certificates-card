@@ -42,33 +42,47 @@ export async function generateCardImage(template: Template, formData: any): Prom
     // Draw template image
     ctx.drawImage(image, 0, 0, width, height);
     
-    // Add semi-transparent overlay for better text visibility
-    ctx.fillStyle = "rgba(0, 0, 0, 0.3)";
-    ctx.fillRect(0, 0, width, height);
+    // Add semi-transparent overlay for better text visibility if needed
+    if (!template.settings?.noOverlay) {
+      ctx.fillStyle = "rgba(0, 0, 0, 0.3)";
+      ctx.fillRect(0, 0, width, height);
+    }
     
-    // Set text properties
+    // Default text properties (will be overridden by field settings)
     ctx.textAlign = "center";
     ctx.fillStyle = "#FFFFFF";
     ctx.direction = "rtl";
     ctx.textBaseline = "middle";
+    ctx.shadowColor = "rgba(0, 0, 0, 0.7)";
+    ctx.shadowBlur = 5;
     
-    // Draw text based on template category and form data
-    switch (template.category) {
-      case "wedding":
-        drawWeddingText(ctx, formData, width, height);
-        break;
-      case "engagement":
-        drawEngagementText(ctx, formData, width, height);
-        break;
-      case "graduation":
-        drawGraduationText(ctx, formData, width, height);
-        break;
-      case "eid":
-        drawEidText(ctx, formData, width, height);
-        break;
-      case "ramadan":
-        drawRamadanText(ctx, formData, width, height);
-        break;
+    // طباعة معلومات الحقول المستخدمة
+    console.log("Form Data:", formData);
+    
+    // جلب بيانات حقول القالب
+    try {
+      // جلب حقول القالب من قاعدة البيانات
+      const { db } = await import('./db');
+      const { templateFields } = await import('@shared/schema');
+      
+      // استعلام الحقول للقالب
+      const fields = await db.query.templateFields.findMany({
+        where: (templateFields, { eq }) => eq(templateFields.templateId, template.id)
+      });
+      
+      console.log(`Found ${fields.length} template fields for template ID ${template.id}`);
+      
+      // الحقول المُدخلة - مع الإعدادات المخصصة لكل حقل
+      if (formData) {
+        drawCustomFieldsWithStyles(ctx, formData, width, height, fields);
+      }
+    } catch (error) {
+      console.warn(`Error fetching template fields: ${error}. Using default field styles.`);
+      
+      // استخدام الطريقة الافتراضية إذا فشل استعلام الحقول
+      if (formData) {
+        drawCustomFields(ctx, formData, width, height);
+      }
     }
     
     // Generate unique filename
@@ -84,6 +98,141 @@ export async function generateCardImage(template: Template, formData: any): Prom
     console.error("Error generating image:", error);
     throw new Error("فشل في إنشاء الصورة");
   }
+}
+
+// دالة جديدة لرسم الحقول المخصصة مع أنماط مخصصة
+function drawCustomFieldsWithStyles(ctx: any, formData: any, width: number, height: number, fields: any[]) {
+  // الحصول على أسماء الحقول
+  const fieldNames = Object.keys(formData);
+  if (fieldNames.length === 0) return;
+  
+  console.log(`Drawing ${fieldNames.length} custom fields on image with custom styles`);
+  
+  // إنشاء خريطة للحقول للوصول السريع
+  const fieldMap = new Map();
+  fields.forEach(field => {
+    fieldMap.set(field.name, field);
+  });
+  
+  // معلمات لتحديد موضع النص
+  let spaceBetweenFields = height * 0.1;
+  if (fieldNames.length > 5) {
+    spaceBetweenFields = height * 0.7 / fieldNames.length;
+  }
+  
+  let startY = height * 0.2;
+  
+  // رسم كل حقل
+  fieldNames.forEach((fieldName, index) => {
+    const text = formData[fieldName];
+    if (!text) return;
+    
+    // البحث عن إعدادات الحقل
+    const fieldConfig = fieldMap.get(fieldName);
+    
+    // حفظ حالة السياق الحالية
+    ctx.save();
+    
+    // تطبيق إعدادات الحقل إذا وجدت
+    if (fieldConfig) {
+      console.log(`Applying custom style for field ${fieldName}:`, fieldConfig.style);
+      
+      // استخراج إعدادات النص من حقل style
+      const style = fieldConfig.style || {};
+      
+      // تحديد نوع الخط وحجمه
+      const fontFamily = style.fontFamily || 'Cairo';
+      const fontSize = style.fontSize || 30;
+      const fontWeight = style.fontWeight || '';
+      ctx.font = `${fontWeight} ${fontSize}px ${fontFamily}`;
+      
+      // تحديد لون النص
+      if (style.color) {
+        ctx.fillStyle = style.color;
+      }
+      
+      // تحديد مكان النص
+      let posX = width / 2; // مركز افتراضي
+      let posY = 0;
+      
+      // استخدام الموضع المخصص إذا كان متوفراً
+      if (fieldConfig.position) {
+        if (fieldConfig.position.x !== undefined) {
+          posX = fieldConfig.position.x * width;
+        }
+        if (fieldConfig.position.y !== undefined) {
+          posY = fieldConfig.position.y * height;
+        } else {
+          // استخدام موضع تلقائي
+          posY = startY + (index * spaceBetweenFields);
+        }
+      } else {
+        // استخدام موضع تلقائي
+        posY = startY + (index * spaceBetweenFields);
+      }
+      
+      // رسم النص مع التفاف الكلمات
+      const lines = wrapText(ctx, text, width - 100);
+      let currentY = posY;
+      
+      for (const line of lines) {
+        ctx.fillText(line, posX, currentY);
+        currentY += parseInt(fontSize) + 5;
+      }
+    } else {
+      // استخدام الإعدادات الافتراضية إذا لم يتم العثور على إعدادات مخصصة
+      const fontSize = fieldNames.length > 5 ? 26 : 30;
+      ctx.font = `${fontSize}px Cairo`;
+      
+      // رسم النص
+      const lines = wrapText(ctx, text, width - 100);
+      let currentY = startY + (index * spaceBetweenFields);
+      
+      for (const line of lines) {
+        ctx.fillText(line, width / 2, currentY);
+        currentY += fontSize + 5;
+      }
+    }
+    
+    // استعادة حالة السياق الأصلية
+    ctx.restore();
+  });
+}
+
+// دالة لرسم الحقول المخصصة على الصورة (الإعدادات الافتراضية)
+function drawCustomFields(ctx: any, formData: any, width: number, height: number) {
+  // الحصول على أسماء الحقول
+  const fieldNames = Object.keys(formData);
+  if (fieldNames.length === 0) return;
+  
+  console.log(`Drawing ${fieldNames.length} custom fields on image with default styles`);
+  
+  // معلمات لتحديد موضع النص
+  let spaceBetweenFields = height * 0.1;
+  if (fieldNames.length > 5) {
+    spaceBetweenFields = height * 0.7 / fieldNames.length;
+  }
+  
+  let startY = height * 0.2;
+  
+  // رسم كل حقل
+  fieldNames.forEach((fieldName, index) => {
+    const text = formData[fieldName];
+    if (!text) return;
+    
+    // حجم الخط يعتمد على عدد الحقول
+    const fontSize = fieldNames.length > 5 ? 26 : 30;
+    ctx.font = `${fontSize}px Cairo`;
+    
+    // رسم النص
+    const lines = wrapText(ctx, text, width - 100);
+    let currentY = startY + (index * spaceBetweenFields);
+    
+    for (const line of lines) {
+      ctx.fillText(line, width / 2, currentY);
+      currentY += fontSize + 5;
+    }
+  });
 }
 
 function drawWeddingText(ctx: any, formData: any, width: number, height: number) {

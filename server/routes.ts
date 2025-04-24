@@ -363,6 +363,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ message: "حدث خطأ أثناء تحميل البطاقة" });
     }
   });
+  
+  // Get a card by ID
+  app.get("/api/cards/:cardId", async (req, res) => {
+    try {
+      // ضبط رأس محتوى JSON
+      res.setHeader('Content-Type', 'application/json');
+      
+      const { cardId } = req.params;
+      console.log(`Fetching card with ID: ${cardId}`);
+      
+      if (isNaN(parseInt(cardId))) {
+        return res.status(400).json({ message: "معرف البطاقة غير صالح" });
+      }
+      
+      const card = await storage.getCard(parseInt(cardId));
+      
+      if (!card) {
+        console.log(`Card with ID ${cardId} not found`);
+        return res.status(404).json({ message: "البطاقة غير موجودة" });
+      }
+      
+      // Get the template
+      const template = await storage.getTemplate(card.templateId);
+      const category = template ? await storage.getCategoryById(template.categoryId) : null;
+      
+      console.log(`Card found: ${card.id}, templateId: ${card.templateId}`);
+      res.json({
+        ...card,
+        template: template ? {
+          ...template,
+          category
+        } : null
+      });
+    } catch (error) {
+      console.error("Error fetching card by ID:", error);
+      res.status(500).json({ message: "حدث خطأ أثناء تحميل البطاقة" });
+    }
+  });
 
   // Create a new certificate (public)
   app.post("/api/certificates", async (req, res) => {
@@ -898,6 +936,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ message: "حدث خطأ أثناء تحميل حقول القالب" });
     }
   });
+  
+  // Get template details (admin only) - Used in template fields page
+  app.get("/api/templates/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      console.log(`Looking for template with ID: ${id}`);
+      
+      const templateId = parseInt(id);
+      
+      if (isNaN(templateId)) {
+        return res.status(400).json({ message: "رقم القالب غير صالح" });
+      }
+      
+      const template = await storage.getTemplate(templateId);
+      
+      if (!template) {
+        return res.status(404).json({ message: "القالب غير موجود" });
+      }
+      
+      console.log(`Template found: ${template.title}, ID: ${template.id}`);
+      
+      // Get category details
+      const category = await storage.getCategoryById(template.categoryId);
+      
+      res.json({
+        ...template,
+        category
+      });
+    } catch (error) {
+      console.error("Error fetching template details:", error);
+      res.status(500).json({ message: "حدث خطأ أثناء تحميل تفاصيل القالب" });
+    }
+  });
 
   // Add a new template field to a template
   app.post("/api/templates/:id/fields", async (req, res) => {
@@ -964,6 +1035,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error deleting template field:", error);
       res.status(500).json({ message: "حدث خطأ أثناء حذف حقل القالب" });
+    }
+  });
+  
+  // Get all fields for a template (admin only)
+  app.get("/api/admin/template-fields/:templateId", isAdmin, async (req, res) => {
+    try {
+      const { templateId } = req.params;
+      
+      if (isNaN(parseInt(templateId))) {
+        return res.status(400).json({ message: "رقم القالب غير صالح" });
+      }
+      
+      // Check if template exists
+      const template = await storage.getTemplate(parseInt(templateId));
+      
+      if (!template) {
+        return res.status(404).json({ message: "القالب غير موجود" });
+      }
+      
+      const fields = await storage.getTemplateFields(parseInt(templateId));
+      res.json(fields);
+    } catch (error) {
+      console.error("Error fetching template fields:", error);
+      res.status(500).json({ message: "حدث خطأ أثناء تحميل حقول القالب" });
     }
   });
 
@@ -1229,6 +1324,73 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Serve uploaded card images and files
   app.use("/uploads", express.static(uploadsDir));
+
+  // Copy fields from one template to another (admin)
+  app.post("/api/admin/copy-template-fields", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const { sourceTemplateId, targetTemplateId, fieldIds } = req.body;
+      
+      if (!sourceTemplateId || !targetTemplateId) {
+        return res.status(400).json({ message: "معرف القالب المصدر والهدف مطلوبان" });
+      }
+      
+      // Get the fields to copy
+      let fieldsToCopy = [];
+      if (fieldIds && fieldIds.length > 0) {
+        // Copy only selected fields
+        const sourceFields = await storage.getTemplateFields(parseInt(sourceTemplateId));
+        fieldsToCopy = sourceFields.filter(field => fieldIds.includes(field.id));
+      } else {
+        // Copy all fields
+        fieldsToCopy = await storage.getTemplateFields(parseInt(sourceTemplateId));
+      }
+      
+      // Get the current fields for the target template to determine the next display order
+      const targetFields = await storage.getTemplateFields(parseInt(targetTemplateId));
+      const nextDisplayOrder = targetFields.length;
+      
+      // Create each field in the target template
+      const createdFields = [];
+      for (let i = 0; i < fieldsToCopy.length; i++) {
+        const field = fieldsToCopy[i];
+        const { id, ...fieldData } = field; // Remove id to create a new field
+        
+        const newField = await storage.createTemplateField({
+          ...fieldData,
+          templateId: parseInt(targetTemplateId),
+          displayOrder: nextDisplayOrder + i,
+        });
+        
+        createdFields.push(newField);
+      }
+      
+      res.status(201).json({ 
+        message: `تم نسخ ${createdFields.length} حقل بنجاح`,
+        fields: createdFields
+      });
+    } catch (error) {
+      console.error("Error copying template fields:", error);
+      res.status(500).json({ message: "حدث خطأ أثناء نسخ حقول القالب" });
+    }
+  });
+  
+  // Get all templates for dropdown lists (admin)
+  app.get("/api/admin/templates-list", isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const { templates } = await storage.getAllTemplates();
+      
+      // Return only id and title for dropdown lists
+      const templatesList = templates.map(template => ({
+        id: template.id,
+        title: template.title
+      }));
+      
+      res.json(templatesList);
+    } catch (error) {
+      console.error("Error fetching templates list:", error);
+      res.status(500).json({ message: "حدث خطأ أثناء تحميل قائمة القوالب" });
+    }
+  });
 
   // Create HTTP server
   const httpServer = createServer(app);
