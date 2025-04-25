@@ -49,11 +49,34 @@ export async function generateCertificateImage(template: Template, formData: any
     const fontFamily = settings.certificateFontFamily || settings.fontFamily || 'DecoType Naskh, Amiri, Arial';
     const fontSize = settings.fontSize || 24;
     
-    // Get template fields and render text based on positions
-    // If no template fields with positions are defined, use default layout
-    if (Array.isArray(template.templateFields) && template.templateFields.length > 0) {
+    // Fetch template fields from database if not provided in template object
+    let templateFields = [];
+    
+    try {
+      if (Array.isArray(template.templateFields) && template.templateFields.length > 0) {
+        templateFields = template.templateFields;
+      } else {
+        // Fetch fields from database
+        const { db } = await import('./db');
+        const { templateFields: templateFieldsTable } = await import('@shared/schema');
+        
+        // Query fields for this template
+        templateFields = await db.query.templateFields.findMany({
+          where: (fields, { eq }) => eq(fields.templateId, template.id)
+        });
+        
+        console.log(`Fetched ${templateFields.length} template fields from database for template ID ${template.id}`);
+      }
+    } catch (error) {
+      console.warn(`Error fetching template fields: ${error}. Using default rendering.`);
+    }
+    
+    // If we have template fields with positions, use them for rendering
+    if (templateFields.length > 0) {
+      console.log(`Rendering certificate with ${templateFields.length} custom fields`);
+      
       // Render text based on defined field positions
-      for (const field of template.templateFields) {
+      for (const field of templateFields) {
         if (!formData[field.name] && !field.defaultValue) continue;
         
         const value = formData[field.name] || field.defaultValue || '';
@@ -64,10 +87,28 @@ export async function generateCertificateImage(template: Template, formData: any
         const x = position.x !== undefined ? (position.x / 100) * width : width / 2;
         const y = position.y !== undefined ? (position.y / 100) * height : height / 2;
         
+        console.log(`Rendering field ${field.name} at position (${position.x}%, ${position.y}%) => (${Math.round(x)}px, ${Math.round(y)}px)`);
+        
+        // Reset shadow
+        ctx.shadowBlur = 0;
+        
         // Set field-specific styles
         ctx.fillStyle = fieldStyle.color || settings.textColor || '#000000';
-        ctx.font = `${fieldStyle.weight || ''} ${fieldStyle.size || fontSize}px ${fieldStyle.fontFamily || fontFamily}`;
+        
+        // تحديد وزن الخط وحجمه ونوعه
+        const fontWeight = fieldStyle.fontWeight || fieldStyle.weight || '';
+        const fieldFontSize = fieldStyle.fontSize || fieldStyle.size || fontSize;
+        const fieldFontFamily = fieldStyle.fontFamily || fontFamily;
+        ctx.font = `${fontWeight} ${fieldFontSize}px ${fieldFontFamily}`;
+        
+        // تحديد محاذاة النص
         ctx.textAlign = fieldStyle.align || 'center';
+        
+        // إضافة ظل النص عند الحاجة
+        if (fieldStyle.textShadow) {
+          ctx.shadowColor = "rgba(0, 0, 0, 0.7)";
+          ctx.shadowBlur = 5;
+        }
         
         // Draw text
         if (typeof value === 'string') {

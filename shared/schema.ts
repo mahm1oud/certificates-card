@@ -7,13 +7,20 @@ import { relations } from "drizzle-orm";
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
   username: text("username").notNull().unique(),
-  password: text("password").notNull(),
+  password: text("password"), // تم جعل هذا الحقل اختياريًا لدعم تسجيل الدخول من خلال مواقع التواصل الاجتماعي
   email: text("email").notNull().unique(),
   name: text("name"),
   role: text("role").default("user").notNull(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   lastLogin: timestamp("last_login"),
   active: boolean("active").default(true).notNull(),
+  // حقول خاصة بتسجيل الدخول من خلال مواقع التواصل الاجتماعي
+  profileImageUrl: text("profile_image_url"), // رابط صورة الملف الشخصي
+  provider: text("provider"), // المزود (google, facebook, twitter, linkedin)
+  providerId: text("provider_id"), // معرف المستخدم لدى المزود
+  providerData: json("provider_data").default({}), // بيانات إضافية من المزود
+  verifiedEmail: boolean("verified_email").default(false), // هل تم التحقق من البريد الإلكتروني
+  locale: text("locale").default("ar"), // لغة المستخدم المفضلة
 });
 
 export const insertUserSchema = createInsertSchema(users).pick({
@@ -23,6 +30,12 @@ export const insertUserSchema = createInsertSchema(users).pick({
   name: true,
   role: true,
   active: true,
+  profileImageUrl: true,
+  provider: true,
+  providerId: true,
+  providerData: true,
+  verifiedEmail: true,
+  locale: true,
 });
 
 export type InsertUser = z.infer<typeof insertUserSchema>;

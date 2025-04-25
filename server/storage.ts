@@ -27,6 +27,21 @@ const sessionStore = new PostgresSessionStore({
   createTableIfMissing: true 
 });
 
+// تعريف واجهة لإعدادات المزودين الاجتماعيين
+export interface AuthProviderSettings {
+  id: number;
+  provider: string;
+  enabled: boolean;
+  clientId: string | null;
+  clientSecret: string | null;
+  redirectUri: string | null;
+  scope: string | null;
+  additionalSettings: Record<string, any>;
+  createdAt: Date;
+  updatedAt: Date;
+  updatedBy: number | null;
+}
+
 export interface IStorage {
   // Session store
   sessionStore: session.SessionStore;
@@ -35,10 +50,16 @@ export interface IStorage {
   getUser(id: number): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>;
+  getUserByProviderId(provider: string, providerId: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
   updateUser(id: number, data: Partial<InsertUser>): Promise<User | undefined>;
   getAllUsers(options?: { limit?: number; offset?: number; search?: string }): Promise<{ users: User[]; total: number }>;
   deleteUser(id: number): Promise<boolean>;
+  
+  // Auth Provider Settings
+  getAuthSettings(provider: string): Promise<AuthProviderSettings | undefined>;
+  getAllAuthSettings(): Promise<AuthProviderSettings[]>;
+  updateAuthSettings(provider: string, settings: Partial<AuthProviderSettings>): Promise<AuthProviderSettings | undefined>;
   
   // Category methods
   getAllCategories(options?: { active?: boolean }): Promise<Category[]>;
@@ -389,6 +410,16 @@ export class DatabaseStorage implements IStorage {
     const [user] = await db.select().from(users).where(eq(users.email, email));
     return user;
   }
+  
+  async getUserByProviderId(provider: string, providerId: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(
+      and(
+        eq(users.provider, provider),
+        eq(users.providerId, providerId)
+      )
+    );
+    return user;
+  }
 
   async createUser(insertUser: InsertUser): Promise<User> {
     const [user] = await db.insert(users).values(insertUser).returning();
@@ -437,6 +468,75 @@ export class DatabaseStorage implements IStorage {
   async deleteUser(id: number): Promise<boolean> {
     const result = await db.delete(users).where(eq(users.id, id));
     return !!result;
+  }
+
+  // Auth Provider Settings methods
+  async getAuthSettings(provider: string): Promise<AuthProviderSettings | undefined> {
+    const query = `
+      SELECT * FROM auth_settings
+      WHERE provider = $1
+      LIMIT 1
+    `;
+    
+    try {
+      const result = await pool.query(query, [provider]);
+      return result.rows[0];
+    } catch (error) {
+      console.error('Error fetching auth settings:', error);
+      return undefined;
+    }
+  }
+  
+  async getAllAuthSettings(): Promise<AuthProviderSettings[]> {
+    const query = `
+      SELECT * FROM auth_settings
+      ORDER BY provider
+    `;
+    
+    try {
+      const result = await pool.query(query);
+      return result.rows;
+    } catch (error) {
+      console.error('Error fetching all auth settings:', error);
+      return [];
+    }
+  }
+  
+  async updateAuthSettings(provider: string, settings: Partial<AuthProviderSettings>): Promise<AuthProviderSettings | undefined> {
+    const { clientId, clientSecret, redirectUri, scope, enabled, additionalSettings, updatedBy } = settings;
+    
+    const query = `
+      UPDATE auth_settings 
+      SET 
+        client_id = COALESCE($1, client_id),
+        client_secret = COALESCE($2, client_secret),
+        redirect_uri = COALESCE($3, redirect_uri),
+        scope = COALESCE($4, scope),
+        enabled = COALESCE($5, enabled),
+        additional_settings = COALESCE($6, additional_settings),
+        updated_by = COALESCE($7, updated_by),
+        updated_at = NOW()
+      WHERE provider = $8
+      RETURNING *
+    `;
+    
+    try {
+      const result = await pool.query(query, [
+        clientId,
+        clientSecret, 
+        redirectUri,
+        scope,
+        enabled,
+        additionalSettings || {},
+        updatedBy,
+        provider
+      ]);
+      
+      return result.rows[0];
+    } catch (error) {
+      console.error('Error updating auth settings:', error);
+      return undefined;
+    }
   }
 
   // Category methods
@@ -630,6 +730,13 @@ export class DatabaseStorage implements IStorage {
       .from(templateFields)
       .where(eq(templateFields.templateId, templateId))
       .orderBy(asc(templateFields.displayOrder));
+  }
+  
+  async getAllTemplateFields(): Promise<TemplateField[]> {
+    return db
+      .select()
+      .from(templateFields)
+      .orderBy(asc(templateFields.templateId), asc(templateFields.displayOrder));
   }
 
   async getTemplateField(id: number): Promise<TemplateField | undefined> {

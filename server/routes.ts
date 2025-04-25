@@ -6,7 +6,7 @@ import path from "path";
 import fs from "fs";
 import { setupAuth, isAuthenticated, isAdmin, comparePasswords, hashPassword } from "./auth";
 import { generateCertificateImage } from "./certificate-generator";
-import { processExcelBatch } from "./batch-processor";
+import { processExcelBatch, generateVerificationCode } from "./batch-processor";
 import multer from "multer";
 import { randomUUID } from "crypto";
 import { z } from "zod";
@@ -403,6 +403,61 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Create a new certificate (public)
+  // API endpoint for generating certificates (used by certificate form)
+  app.post("/api/certificates/generate", async (req, res) => {
+    try {
+      const { templateId, formData } = req.body;
+      
+      console.log(`Generating certificate for template ID: ${templateId}`);
+      
+      // Get the template
+      const template = await storage.getTemplate(Number(templateId));
+      
+      if (!template) {
+        console.error(`Template with ID ${templateId} not found`);
+        return res.status(404).json({ message: "القالب غير موجود" });
+      }
+      
+      console.log(`Found template: ${template.title}`);
+      console.log(`Generating certificate with formData:`, formData);
+      
+      // Generate the certificate image
+      const imagePath = await generateCertificateImage(template, formData);
+      console.log(`Certificate image generated at: ${imagePath}`);
+      
+      // Extract values from formData
+      const certificateType = formData.certificateType || template.certificateType || 'appreciation';
+      const issuedTo = formData.issuedTo;
+      const issuedToGender = formData.issuedToGender || 'male';
+      
+      // Save the certificate to storage
+      const certificate = await storage.createCertificate({
+        templateId: template.id,
+        userId: req.isAuthenticated() ? req.user?.id : undefined,
+        formData,
+        imageUrl: `/uploads/${path.basename(imagePath)}`,
+        certificateType,
+        title: formData.title || template.title,
+        titleAr: formData.titleAr || template.titleAr,
+        issuedTo,
+        issuedToGender,
+        status: 'active',
+        verificationCode: generateVerificationCode(),
+        publicId: randomUUID(),
+      });
+      
+      console.log(`Certificate created with ID: ${certificate.id}`);
+      res.json({ 
+        certificateId: certificate.id,
+        publicId: certificate.publicId,
+        imageUrl: certificate.imageUrl 
+      });
+    } catch (error) {
+      console.error("Error generating certificate:", error);
+      res.status(500).json({ message: "حدث خطأ أثناء إنشاء الشهادة" });
+    }
+  });
+
   app.post("/api/certificates", async (req, res) => {
     try {
       const { templateId, formData, certificateType, issuedTo, issuedToGender } = req.body;
@@ -420,7 +475,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Save the certificate to storage
       const certificate = await storage.createCertificate({
         templateId: template.id,
-        userId: req.isAuthenticated() ? req.user.id : undefined,
+        userId: req.isAuthenticated() ? req.user?.id : undefined,
         formData,
         imageUrl: `/uploads/${path.basename(imagePath)}`,
         certificateType: certificateType || 'appreciation',
@@ -429,6 +484,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         issuedTo,
         issuedToGender: issuedToGender || 'male',
         status: 'active',
+        verificationCode: generateVerificationCode(),
         publicId: randomUUID()
       });
       
@@ -895,6 +951,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Template Fields CRUD operations (admin only)
+  // Get template fields by template ID or all fields
+  app.get("/api/admin/template-fields", isAdmin, async (req, res) => {
+    try {
+      const { templateId } = req.query;
+      
+      // If templateId is provided, get fields for that template
+      if (templateId) {
+        const fields = await storage.getTemplateFields(parseInt(templateId as string));
+        console.log(`Retrieved ${fields.length} fields for template ID ${templateId}`);
+        return res.json(fields);
+      }
+      
+      // Otherwise get all fields (not recommended for large datasets)
+      const allFields = await storage.getAllTemplateFields();
+      console.log(`Retrieved ${allFields.length} fields in total`);
+      res.json(allFields);
+    } catch (error) {
+      console.error("Error fetching template fields:", error);
+      res.status(500).json({ message: "حدث خطأ أثناء تحميل حقول القالب" });
+    }
+  });
+  
   app.post("/api/admin/template-fields", isAdmin, async (req, res) => {
     try {
       const validatedData = insertTemplateFieldSchema.parse(req.body);
@@ -1389,6 +1467,57 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching templates list:", error);
       res.status(500).json({ message: "حدث خطأ أثناء تحميل قائمة القوالب" });
+    }
+  });
+  
+  // جلب معلومات تخطيط القالب
+  app.get('/api/admin/templates/:templateId/layout', isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const templateId = parseInt(req.params.templateId);
+      const template = await storage.getTemplate(templateId);
+      
+      if (!template) {
+        return res.status(404).json({ message: 'القالب غير موجود' });
+      }
+      
+      // إرجاع بيانات التخطيط إذا كانت موجودة، وإلا إرجاع مصفوفة فارغة
+      const layoutData = template.settings?.layoutData || [];
+      res.json(layoutData);
+    } catch (error) {
+      console.error('Error fetching template layout:', error);
+      res.status(500).json({ message: 'حدث خطأ أثناء جلب بيانات التخطيط' });
+    }
+  });
+  
+  // تحديث معلومات تخطيط القالب
+  app.put('/api/admin/templates/:templateId/layout', isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const templateId = parseInt(req.params.templateId);
+      const { layout } = req.body;
+      
+      if (!Array.isArray(layout)) {
+        return res.status(400).json({ message: 'بيانات التخطيط غير صالحة' });
+      }
+      
+      const template = await storage.getTemplate(templateId);
+      
+      if (!template) {
+        return res.status(404).json({ message: 'القالب غير موجود' });
+      }
+      
+      // دمج بيانات التخطيط مع الإعدادات الحالية
+      const settings = {
+        ...(template.settings || {}),
+        layoutData: layout
+      };
+      
+      // تحديث إعدادات القالب
+      await storage.updateTemplate(templateId, { settings });
+      
+      res.json({ message: 'تم تحديث التخطيط بنجاح', layoutData: layout });
+    } catch (error) {
+      console.error('Error updating template layout:', error);
+      res.status(500).json({ message: 'حدث خطأ أثناء تحديث بيانات التخطيط' });
     }
   });
 

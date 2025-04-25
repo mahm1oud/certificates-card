@@ -158,7 +158,8 @@ function formatExcelDate(excelDate: number | string): string {
  * Generate a verification code for certificates
  * @returns Verification code
  */
-function generateVerificationCode(): string {
+// Generate a verification code for certificates
+export function generateVerificationCode(): string {
   // Generate a random 6-character alphanumeric code
   return Math.random().toString(36).substring(2, 8).toUpperCase();
 }

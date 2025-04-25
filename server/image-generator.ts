@@ -2,7 +2,7 @@ import type { Template } from "@shared/schema";
 import path from "path";
 import fs from "fs";
 import { createCanvas, loadImage, registerFont } from "canvas";
-import { formatDate, formatTime } from "@/lib/utils";
+import { formatDate, formatTime } from "./lib/utils";
 import crypto from "crypto";
 
 // Register Arabic fonts if available
@@ -61,20 +61,32 @@ export async function generateCardImage(template: Template, formData: any): Prom
     
     // جلب بيانات حقول القالب
     try {
-      // جلب حقول القالب من قاعدة البيانات
-      const { db } = await import('./db');
-      const { templateFields } = await import('@shared/schema');
+      // جلب حقول القالب من قاعدة البيانات (إلا إذا كانت موجودة بالفعل)
+      let fields = [];
       
-      // استعلام الحقول للقالب
-      const fields = await db.query.templateFields.findMany({
-        where: (templateFields, { eq }) => eq(templateFields.templateId, template.id)
-      });
-      
-      console.log(`Found ${fields.length} template fields for template ID ${template.id}`);
+      if (Array.isArray(template.templateFields) && template.templateFields.length > 0) {
+        fields = template.templateFields;
+        console.log(`Using ${fields.length} template fields provided with the template object`);
+      } else {
+        // جلب حقول القالب من قاعدة البيانات
+        const { db } = await import('./db');
+        const { templateFields } = await import('@shared/schema');
+        
+        // استعلام الحقول للقالب
+        fields = await db.query.templateFields.findMany({
+          where: (templateFields, { eq }) => eq(templateFields.templateId, template.id)
+        });
+        
+        console.log(`Fetched ${fields.length} template fields from database for template ID ${template.id}`);
+      }
       
       // الحقول المُدخلة - مع الإعدادات المخصصة لكل حقل
-      if (formData) {
+      if (formData && fields.length > 0) {
+        console.log(`Applying custom field positions and styles for ${fields.length} fields`);
         drawCustomFieldsWithStyles(ctx, formData, width, height, fields);
+      } else if (formData) {
+        console.log(`No custom fields found, using default layout`);
+        drawCustomFields(ctx, formData, width, height);
       }
     } catch (error) {
       console.warn(`Error fetching template fields: ${error}. Using default field styles.`);
@@ -149,6 +161,14 @@ function drawCustomFieldsWithStyles(ctx: any, formData: any, width: number, heig
       // تحديد لون النص
       if (style.color) {
         ctx.fillStyle = style.color;
+        // إيقاف ظل النص إذا كان هناك لون مخصص للحقل
+        ctx.shadowBlur = 0;
+      }
+      
+      // تحديد محاذاة النص
+      if (style.align) {
+        ctx.textAlign = style.align as CanvasTextAlign;
+        console.log(`Setting text alignment for ${fieldName} to: ${style.align}`);
       }
       
       // تحديد مكان النص
@@ -158,10 +178,14 @@ function drawCustomFieldsWithStyles(ctx: any, formData: any, width: number, heig
       // استخدام الموضع المخصص إذا كان متوفراً
       if (fieldConfig.position) {
         if (fieldConfig.position.x !== undefined) {
-          posX = fieldConfig.position.x * width;
+          // تحويل النسبة المئوية (0-100) إلى موضع فعلي على الصورة
+          posX = (fieldConfig.position.x / 100) * width;
+          console.log(`Field ${fieldName} position X: ${fieldConfig.position.x}% => ${Math.round(posX)}px`);
         }
         if (fieldConfig.position.y !== undefined) {
-          posY = fieldConfig.position.y * height;
+          // تحويل النسبة المئوية (0-100) إلى موضع فعلي على الصورة
+          posY = (fieldConfig.position.y / 100) * height;
+          console.log(`Field ${fieldName} position Y: ${fieldConfig.position.y}% => ${Math.round(posY)}px`);
         } else {
           // استخدام موضع تلقائي
           posY = startY + (index * spaceBetweenFields);
