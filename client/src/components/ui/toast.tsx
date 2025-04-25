@@ -114,6 +114,43 @@ type ToastProps = React.ComponentPropsWithoutRef<typeof Toast>
 
 type ToastActionElement = React.ReactElement<typeof ToastAction>
 
+// أضف دالة toast سهلة الاستخدام
+import { useToast } from "@/hooks/use-toast"
+
+type ToastOptions = {
+  title?: string;
+  description?: string;
+  variant?: "default" | "destructive";
+  duration?: number;
+};
+
+// دالة toast مبسطة للاستخدام
+const toast = (options: ToastOptions) => {
+  const { toast: hookToast } = useToast();
+  hookToast({
+    variant: options.variant || "default",
+    title: options.title || "",
+    description: options.description || "",
+    duration: options.duration || 3000,
+  });
+};
+
+// أضف دوال مساعدة للتنبيهات الشائعة
+toast.success = (message: string) => {
+  toast({
+    title: "نجاح",
+    description: message,
+  });
+};
+
+toast.error = (message: string) => {
+  toast({
+    variant: "destructive",
+    title: "خطأ",
+    description: message,
+  });
+};
+
 export {
   type ToastProps,
   type ToastActionElement,
@@ -124,4 +161,5 @@ export {
   ToastDescription,
   ToastClose,
   ToastAction,
+  toast
 }
