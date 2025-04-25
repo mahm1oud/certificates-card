@@ -12,7 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, Plus, Save, ArrowLeft, Pencil, Trash2, XCircle, ChevronUp, ChevronDown, Copy } from "lucide-react";
+import { Loader2, Plus, Save, ArrowLeft, Pencil, Trash2, XCircle, ChevronUp, ChevronDown, Copy, Share2 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
 
@@ -48,249 +48,262 @@ type Template = {
   category?: {
     name: string;
     nameAr?: string;
-  }
+    slug: string;
+  };
 };
 
 export default function TemplateFieldsPage() {
-  const { templateId } = useParams();
-  const [_, setLocation] = useLocation();
+  const { templateId } = useParams<{ templateId: string }>();
+  const [, setLocation] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isCopyDialogOpen, setIsCopyDialogOpen] = useState(false);
-  const [editingField, setEditingField] = useState<TemplateField | null>(null);
+  const [editingField, setEditingField] = useState<number | null>(null);
   const [fieldFormData, setFieldFormData] = useState<Partial<TemplateField>>({
+    templateId: Number(templateId),
     name: '',
     label: '',
     labelAr: '',
     type: 'text',
     required: false,
-    defaultValue: '',
     placeholder: '',
     placeholderAr: '',
+    defaultValue: '',
     options: [],
-    displayOrder: 0
+    displayOrder: 0,
+    position: { x: 50, y: 50 }, // موضع افتراضي (منتصف الصفحة)
+    style: {}
   });
   const [newOption, setNewOption] = useState('');
   const [sourceTemplateId, setSourceTemplateId] = useState<string>('');
   const [selectedFields, setSelectedFields] = useState<number[]>([]);
   const [selectAll, setSelectAll] = useState(false);
+  const [showGrid, setShowGrid] = useState(true);
 
   // Fetch template details
   const { data: template, isLoading: isTemplateLoading } = useQuery<Template>({
     queryKey: [`/api/templates/${templateId}`],
     queryFn: getQueryFn({ on401: "redirect-to-login" }),
-    refetchOnWindowFocus: true
+    staleTime: 60000,
   });
 
   // Fetch template fields
-  const { data: fields, isLoading: isFieldsLoading, refetch: refetchFields } = useQuery<TemplateField[]>({
+  const { data: fields, isLoading: isFieldsLoading } = useQuery<TemplateField[]>({
     queryKey: [`/api/admin/template-fields/${templateId}`],
     queryFn: getQueryFn({ on401: "redirect-to-login" }),
-    // يتم التعامل مع الأخطاء بشكل داخلي من خلال getQueryFn
-    refetchOnWindowFocus: true
+    staleTime: 10000,
   });
-  
-  // Fetch all templates for dropdown
-  const { data: allTemplates, isLoading: isAllTemplatesLoading } = useQuery<{id: number, title: string}[]>({
+
+  // Fetch all templates for the copy fields feature
+  const { data: allTemplates } = useQuery<Template[]>({
     queryKey: ['/api/admin/templates-list'],
     queryFn: getQueryFn({ on401: "redirect-to-login" }),
-    refetchOnWindowFocus: true
+    staleTime: 300000,
   });
-  
-  // Fetch source template fields when sourceTemplateId changes
+
+  // Fetch source template fields when a source template is selected
   const { data: sourceFields, isLoading: isSourceFieldsLoading } = useQuery<TemplateField[]>({
     queryKey: [`/api/admin/template-fields/${sourceTemplateId}`],
     queryFn: getQueryFn({ on401: "redirect-to-login" }),
-    enabled: !!sourceTemplateId, // Only run query when sourceTemplateId exists
-    refetchOnWindowFocus: true
+    staleTime: 10000,
+    enabled: !!sourceTemplateId,
   });
 
-  // Create field mutation
+  // Mutation for creating a new field
   const createFieldMutation = useMutation({
-    mutationFn: async (data: any) => {
-      const res = await apiRequest("POST", `/api/templates/${templateId}/fields`, data, { on401: "redirect-to-login" });
-      return res.json();
-    },
+    mutationFn: (data: Partial<TemplateField>) => 
+      apiRequest('POST', `/api/admin/template-fields`, data, { on401: 'redirect-to-login' }),
     onSuccess: () => {
-      setIsDialogOpen(false);
-      resetFieldForm();
-      refetchFields();
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/template-fields/${templateId}`] });
       toast({
         title: "تم إضافة الحقل بنجاح",
+        description: "تم إضافة الحقل الجديد إلى القالب",
       });
+      setIsDialogOpen(false);
+      resetForm();
     },
-    onError: (error) => {
+    onError: (error: any) => {
       toast({
-        title: "خطأ في إضافة الحقل",
-        description: error.message,
+        title: "حدث خطأ",
+        description: error.message || "فشل في إضافة الحقل، يرجى المحاولة مرة أخرى",
         variant: "destructive",
       });
     }
   });
 
-  // Update field mutation
+  // Mutation for updating an existing field
   const updateFieldMutation = useMutation({
-    mutationFn: async (data: any) => {
-      const res = await apiRequest("PUT", `/api/admin/template-fields/${data.id}`, data, { on401: "redirect-to-login" });
-      return res.json();
-    },
+    mutationFn: (data: { id: number, fieldData: Partial<TemplateField> }) => 
+      apiRequest('PUT', `/api/admin/template-fields/${data.id}`, data.fieldData, { on401: 'redirect-to-login' }),
     onSuccess: () => {
-      setIsDialogOpen(false);
-      resetFieldForm();
-      refetchFields();
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/template-fields/${templateId}`] });
       toast({
         title: "تم تحديث الحقل بنجاح",
+        description: "تم تحديث خصائص الحقل",
       });
+      setIsDialogOpen(false);
+      resetForm();
     },
-    onError: (error) => {
+    onError: (error: any) => {
       toast({
-        title: "خطأ في تحديث الحقل",
-        description: error.message,
+        title: "حدث خطأ",
+        description: error.message || "فشل في تحديث الحقل، يرجى المحاولة مرة أخرى",
         variant: "destructive",
       });
     }
   });
 
-  // Delete field mutation
+  // Mutation for deleting a field
   const deleteFieldMutation = useMutation({
-    mutationFn: async (id: number) => {
-      const res = await apiRequest("DELETE", `/api/admin/template-fields/${id}`, null, { on401: "redirect-to-login" });
-      return res.json();
-    },
+    mutationFn: (id: number) => 
+      apiRequest('DELETE', `/api/admin/template-fields/${id}`, undefined, { on401: 'redirect-to-login' }),
     onSuccess: () => {
-      refetchFields();
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/template-fields/${templateId}`] });
       toast({
         title: "تم حذف الحقل بنجاح",
+        description: "تم حذف الحقل من القالب",
       });
     },
-    onError: (error) => {
+    onError: (error: any) => {
       toast({
-        title: "خطأ في حذف الحقل",
-        description: error.message,
+        title: "حدث خطأ",
+        description: error.message || "فشل في حذف الحقل، يرجى المحاولة مرة أخرى",
         variant: "destructive",
       });
     }
   });
 
-  // Reorder field mutation
-  const reorderFieldMutation = useMutation({
-    mutationFn: async ({ id, direction }: { id: number, direction: 'up' | 'down' }) => {
-      // Simply refetch fields after a short delay to simulate reordering
-      // This is a workaround until the reorder API endpoint is implemented
-      await new Promise(resolve => setTimeout(resolve, 300));
-      return { success: true };
-    },
+  // Mutation for updating field order
+  const updateOrderMutation = useMutation({
+    mutationFn: (data: { id: number, direction: 'up' | 'down' }) => 
+      apiRequest('PUT', `/api/admin/template-fields/${data.id}/order/${data.direction}`, undefined, { on401: 'redirect-to-login' }),
     onSuccess: () => {
-      refetchFields();
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/template-fields/${templateId}`] });
     },
-    onError: (error) => {
+    onError: (error: any) => {
       toast({
-        title: "خطأ في إعادة ترتيب الحقل",
-        description: error.message,
+        title: "حدث خطأ",
+        description: error.message || "فشل في تغيير ترتيب الحقل، يرجى المحاولة مرة أخرى",
         variant: "destructive",
       });
     }
   });
-  
-  // Copy fields mutation
+
+  // Mutation for copying fields from another template
   const copyFieldsMutation = useMutation({
-    mutationFn: async (data: { sourceTemplateId: string, targetTemplateId: string, fieldIds?: number[] }) => {
-      const res = await apiRequest("POST", "/api/admin/copy-template-fields", data, { on401: "redirect-to-login" });
-      return res.json();
-    },
-    onSuccess: (data) => {
+    mutationFn: (data: { sourceTemplateId: string, targetTemplateId: string, fieldIds?: number[] }) => 
+      apiRequest('POST', `/api/admin/template-fields/copy`, data, { on401: 'redirect-to-login' }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/template-fields/${templateId}`] });
+      toast({
+        title: "تم نسخ الحقول بنجاح",
+        description: "تم نسخ الحقول إلى القالب الحالي",
+      });
       setIsCopyDialogOpen(false);
       setSourceTemplateId('');
       setSelectedFields([]);
       setSelectAll(false);
-      refetchFields();
-      toast({
-        title: "تم نسخ الحقول بنجاح",
-        description: data.message,
-      });
     },
-    onError: (error) => {
+    onError: (error: any) => {
       toast({
-        title: "خطأ في نسخ الحقول",
-        description: error.message,
+        title: "حدث خطأ",
+        description: error.message || "فشل في نسخ الحقول، يرجى المحاولة مرة أخرى",
         variant: "destructive",
       });
     }
   });
 
+  // Form handlers
+  const handleFieldSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (editingField) {
+      updateFieldMutation.mutate({
+        id: editingField,
+        fieldData: fieldFormData
+      });
+    } else {
+      createFieldMutation.mutate(fieldFormData);
+    }
+  };
+
+  const handleEditField = (field: TemplateField) => {
+    setEditingField(field.id);
+    setFieldFormData({ ...field });
+    setIsDialogOpen(true);
+  };
+
+  const handleDeleteField = (id: number) => {
+    if (confirm('هل أنت متأكد من حذف هذا الحقل؟')) {
+      deleteFieldMutation.mutate(id);
+    }
+  };
+
   const handleAddOption = () => {
     if (!newOption.trim()) return;
     
-    setFieldFormData((prev) => ({
-      ...prev,
-      options: [...(prev.options || []), newOption]
-    }));
-    
+    const currentOptions = fieldFormData.options || [];
+    setFieldFormData({
+      ...fieldFormData,
+      options: [...currentOptions, newOption.trim()]
+    });
     setNewOption('');
   };
 
   const handleRemoveOption = (index: number) => {
-    setFieldFormData((prev) => ({
-      ...prev,
-      options: prev.options?.filter((_, i) => i !== index)
-    }));
+    const newOptions = [...(fieldFormData.options || [])];
+    newOptions.splice(index, 1);
+    setFieldFormData({
+      ...fieldFormData,
+      options: newOptions
+    });
   };
 
-  const resetFieldForm = () => {
+  const resetForm = () => {
     setEditingField(null);
     setFieldFormData({
+      templateId: Number(templateId),
       name: '',
       label: '',
       labelAr: '',
       type: 'text',
       required: false,
-      defaultValue: '',
       placeholder: '',
       placeholderAr: '',
+      defaultValue: '',
       options: [],
-      displayOrder: fields?.length ? fields.length : 0
+      displayOrder: fields?.length ? Math.max(...fields.map(f => f.displayOrder)) + 1 : 1,
+      position: { x: 50, y: 50 }, // موضع افتراضي (منتصف الصفحة)
+      style: {}
     });
   };
 
   const handleDialogClose = (open: boolean) => {
     if (!open) {
-      resetFieldForm();
+      resetForm();
     }
     setIsDialogOpen(open);
   };
 
-  const openEditDialog = (field: TemplateField) => {
-    setEditingField(field);
-    setFieldFormData({
-      ...field,
-      options: field.options || []
-    });
-    setIsDialogOpen(true);
-  };
-
-  const handleFieldSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    const fieldData = {
-      ...fieldFormData,
-      templateId: parseInt(templateId as string)
-    };
-    
-    if (editingField) {
-      updateFieldMutation.mutate({
-        id: editingField.id,
-        ...fieldData
-      });
-    } else {
-      createFieldMutation.mutate(fieldData);
-    }
-  };
-
-  if (isTemplateLoading || isFieldsLoading) {
+  if (isTemplateLoading) {
     return (
-      <div className="container py-8 flex justify-center">
-        <Loader2 className="h-8 w-8 animate-spin" />
+      <div className="container py-8 text-center">
+        <Loader2 className="h-6 w-6 animate-spin mx-auto" />
+        <p className="mt-2">جاري تحميل القالب...</p>
+      </div>
+    );
+  }
+
+  if (!template) {
+    return (
+      <div className="container py-8 text-center">
+        <p>لم يتم العثور على القالب</p>
+        <Button variant="outline" className="mt-4" onClick={() => setLocation('/admin/templates')}>
+          <ArrowLeft className="ml-2 h-4 w-4" />
+          العودة للقوالب
+        </Button>
       </div>
     );
   }
@@ -452,152 +465,530 @@ export default function TemplateFieldsPage() {
             <DialogContent className="sm:max-w-[500px]">
               <DialogHeader>
                 <DialogTitle>{editingField ? 'تعديل حقل' : 'إضافة حقل جديد'}</DialogTitle>
+                <DialogDescription>
+                  {editingField 
+                    ? 'قم بتعديل خصائص الحقل وموضعه في القالب' 
+                    : 'أضف حقلاً جديداً وحدد خصائصه وموضعه في القالب'}
+                </DialogDescription>
               </DialogHeader>
               
-              <form onSubmit={handleFieldSubmit}>
-                <div className="grid gap-4 py-4">
-                  <div className="grid gap-2">
-                    <Label htmlFor="name">اسم الحقل (بالإنجليزية)</Label>
-                    <Input
-                      id="name"
-                      value={fieldFormData.name || ''}
-                      onChange={(e) => setFieldFormData({ ...fieldFormData, name: e.target.value })}
-                      required
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      يستخدم في البرمجة ولا يظهر للمستخدم
-                    </p>
-                  </div>
+              <form onSubmit={handleFieldSubmit} className="overflow-y-auto pr-1" style={{ maxHeight: 'calc(100vh - 200px)' }}>
+                <Tabs defaultValue="basic" className="w-full">
+                  <TabsList className="grid grid-cols-3 mb-4">
+                    <TabsTrigger value="basic">معلومات أساسية</TabsTrigger>
+                    <TabsTrigger value="position">الموضع والمظهر</TabsTrigger>
+                    <TabsTrigger value="options">خيارات إضافية</TabsTrigger>
+                  </TabsList>
                   
-                  <div className="grid gap-2">
-                    <Label htmlFor="label">عنوان الحقل</Label>
-                    <Input
-                      id="label"
-                      value={fieldFormData.label || ''}
-                      onChange={(e) => setFieldFormData({ ...fieldFormData, label: e.target.value })}
-                      required
-                    />
-                  </div>
-                  
-                  <div className="grid gap-2">
-                    <Label htmlFor="labelAr">عنوان الحقل (بالعربية)</Label>
-                    <Input
-                      id="labelAr"
-                      value={fieldFormData.labelAr || ''}
-                      onChange={(e) => setFieldFormData({ ...fieldFormData, labelAr: e.target.value })}
-                    />
-                  </div>
-                  
-                  <div className="grid gap-2">
-                    <Label htmlFor="type">نوع الحقل</Label>
-                    <Select
-                      value={fieldFormData.type}
-                      onValueChange={(value) => setFieldFormData({ ...fieldFormData, type: value })}
-                    >
-                      <SelectTrigger id="type">
-                        <SelectValue placeholder="اختر نوع الحقل" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="text">نص قصير</SelectItem>
-                        <SelectItem value="textarea">نص طويل</SelectItem>
-                        <SelectItem value="number">رقم</SelectItem>
-                        <SelectItem value="date">تاريخ</SelectItem>
-                        <SelectItem value="time">وقت</SelectItem>
-                        <SelectItem value="checkbox">اختيار (نعم/لا)</SelectItem>
-                        <SelectItem value="select">قائمة منسدلة</SelectItem>
-                        <SelectItem value="radio">خيارات متعددة</SelectItem>
-                        <SelectItem value="image">صورة</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  
-                  <div className="flex items-center gap-2">
-                    <Checkbox
-                      id="required"
-                      checked={fieldFormData.required}
-                      onCheckedChange={(checked) => 
-                        setFieldFormData({ ...fieldFormData, required: checked as boolean })
-                      }
-                    />
-                    <Label htmlFor="required">حقل مطلوب؟</Label>
-                  </div>
-                  
-                  <div className="grid gap-2">
-                    <Label htmlFor="placeholder">نص توضيحي</Label>
-                    <Input
-                      id="placeholder"
-                      value={fieldFormData.placeholder || ''}
-                      onChange={(e) => setFieldFormData({ ...fieldFormData, placeholder: e.target.value })}
-                    />
-                  </div>
-                  
-                  <div className="grid gap-2">
-                    <Label htmlFor="placeholderAr">نص توضيحي (بالعربية)</Label>
-                    <Input
-                      id="placeholderAr"
-                      value={fieldFormData.placeholderAr || ''}
-                      onChange={(e) => setFieldFormData({ ...fieldFormData, placeholderAr: e.target.value })}
-                    />
-                  </div>
-                  
-                  <div className="grid gap-2">
-                    <Label htmlFor="defaultValue">القيمة الافتراضية</Label>
-                    <Input
-                      id="defaultValue"
-                      value={fieldFormData.defaultValue || ''}
-                      onChange={(e) => setFieldFormData({ ...fieldFormData, defaultValue: e.target.value })}
-                    />
-                  </div>
-                  
-                  {(fieldFormData.type === 'select' || fieldFormData.type === 'radio') && (
-                    <div className="grid gap-2">
-                      <Label>الخيارات</Label>
-                      <div className="flex gap-2">
-                        <Input
-                          value={newOption}
-                          onChange={(e) => setNewOption(e.target.value)}
-                          placeholder="أضف خيار جديد"
-                        />
-                        <Button type="button" variant="secondary" onClick={handleAddOption}>
-                          إضافة
-                        </Button>
+                  <TabsContent value="basic" className="space-y-4 mt-2">
+                    <div className="grid md:grid-cols-2 gap-4">
+                      <div className="space-y-4">
+                        <div className="grid gap-2">
+                          <Label htmlFor="name">اسم الحقل (بالإنجليزية)</Label>
+                          <Input
+                            id="name"
+                            value={fieldFormData.name || ''}
+                            onChange={(e) => setFieldFormData({ ...fieldFormData, name: e.target.value })}
+                            required
+                          />
+                          <p className="text-xs text-muted-foreground">
+                            يستخدم في البرمجة ولا يظهر للمستخدم
+                          </p>
+                        </div>
+                        
+                        <div className="grid gap-2">
+                          <Label htmlFor="label">عنوان الحقل</Label>
+                          <Input
+                            id="label"
+                            value={fieldFormData.label || ''}
+                            onChange={(e) => setFieldFormData({ ...fieldFormData, label: e.target.value })}
+                            required
+                          />
+                        </div>
+                        
+                        <div className="grid gap-2">
+                          <Label htmlFor="labelAr">عنوان الحقل (بالعربية)</Label>
+                          <Input
+                            id="labelAr"
+                            value={fieldFormData.labelAr || ''}
+                            onChange={(e) => setFieldFormData({ ...fieldFormData, labelAr: e.target.value })}
+                          />
+                        </div>
                       </div>
                       
-                      <div className="mt-2">
-                        {fieldFormData.options?.map((option, index) => (
-                          <div key={index} className="flex items-center gap-2 mt-1">
-                            <span className="border px-3 py-1 rounded flex-1">{option}</span>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleRemoveOption(index)}
-                            >
-                              <XCircle className="h-4 w-4 text-destructive" />
-                            </Button>
-                          </div>
-                        ))}
+                      <div className="space-y-4">
+                        <div className="grid gap-2">
+                          <Label htmlFor="type">نوع الحقل</Label>
+                          <Select 
+                            value={fieldFormData.type || 'text'}
+                            onValueChange={(value) => setFieldFormData({ ...fieldFormData, type: value })}
+                            required
+                          >
+                            <SelectTrigger id="type">
+                              <SelectValue placeholder="اختر نوع الحقل" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="text">نص قصير</SelectItem>
+                              <SelectItem value="textarea">نص طويل</SelectItem>
+                              <SelectItem value="number">رقم</SelectItem>
+                              <SelectItem value="date">تاريخ</SelectItem>
+                              <SelectItem value="time">وقت</SelectItem>
+                              <SelectItem value="select">قائمة منسدلة</SelectItem>
+                              <SelectItem value="radio">خيارات متعددة</SelectItem>
+                              <SelectItem value="checkbox">اختيار (نعم/لا)</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
                         
-                        {!fieldFormData.options?.length && (
-                          <p className="text-sm text-muted-foreground">لا توجد خيارات حتى الآن</p>
-                        )}
+                        <div className="grid gap-2">
+                          <Label htmlFor="placeholder">نص توضيحي</Label>
+                          <Input
+                            id="placeholder"
+                            value={fieldFormData.placeholder || ''}
+                            onChange={(e) => setFieldFormData({ ...fieldFormData, placeholder: e.target.value })}
+                          />
+                        </div>
+                        
+                        <div className="grid gap-2">
+                          <Label htmlFor="placeholderAr">نص توضيحي (بالعربية)</Label>
+                          <Input
+                            id="placeholderAr"
+                            value={fieldFormData.placeholderAr || ''}
+                            onChange={(e) => setFieldFormData({ ...fieldFormData, placeholderAr: e.target.value })}
+                          />
+                        </div>
+                        
+                        <div className="grid gap-2">
+                          <Label htmlFor="defaultValue">القيمة الافتراضية</Label>
+                          <Input
+                            id="defaultValue"
+                            value={fieldFormData.defaultValue || ''}
+                            onChange={(e) => setFieldFormData({ ...fieldFormData, defaultValue: e.target.value })}
+                          />
+                        </div>
                       </div>
                     </div>
-                  )}
-                </div>
-                
-                <DialogFooter>
-                  <Button 
-                    type="submit" 
-                    className="w-full sm:w-auto"
-                    disabled={createFieldMutation.isPending || updateFieldMutation.isPending}
-                  >
-                    {(createFieldMutation.isPending || updateFieldMutation.isPending) && (
-                      <Loader2 className="ml-2 h-4 w-4 animate-spin" />
+                    
+                    <div className="flex items-center space-x-2 space-x-reverse">
+                      <Checkbox 
+                        id="required" 
+                        checked={fieldFormData.required} 
+                        onCheckedChange={(checked) => 
+                          setFieldFormData({ ...fieldFormData, required: !!checked })
+                        }
+                      />
+                      <Label htmlFor="required">حقل إلزامي</Label>
+                    </div>
+                  </TabsContent>
+                  
+                  <TabsContent value="position" className="mt-2">
+                    <div className="grid md:grid-cols-2 gap-6">
+                      <div>
+                        <div className="grid gap-2 mb-4">
+                          <Label>ضبط الموضع</Label>
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="grid gap-2">
+                              <Label htmlFor="positionX">الموضع الأفقي (X٪)</Label>
+                              <Input
+                                id="positionX"
+                                type="number"
+                                min="0"
+                                max="100"
+                                value={fieldFormData.position?.x || 50}
+                                onChange={(e) => setFieldFormData({ 
+                                  ...fieldFormData, 
+                                  position: { 
+                                    ...fieldFormData.position,
+                                    x: Number(e.target.value)
+                                  } 
+                                })}
+                              />
+                              <p className="text-xs text-muted-foreground">
+                                0٪ (يسار) إلى 100٪ (يمين)
+                              </p>
+                            </div>
+                            
+                            <div className="grid gap-2">
+                              <Label htmlFor="positionY">الموضع الرأسي (Y٪)</Label>
+                              <Input
+                                id="positionY"
+                                type="number"
+                                min="0"
+                                max="100"
+                                value={fieldFormData.position?.y || 50}
+                                onChange={(e) => setFieldFormData({ 
+                                  ...fieldFormData, 
+                                  position: { 
+                                    ...fieldFormData.position,
+                                    y: Number(e.target.value)
+                                  } 
+                                })}
+                              />
+                              <p className="text-xs text-muted-foreground">
+                                0٪ (أعلى) إلى 100٪ (أسفل)
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                        
+                        <div className="grid gap-2 mb-2">
+                          <Label>أنماط النص</Label>
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="grid gap-2">
+                              <Label htmlFor="fontWeight">وزن الخط</Label>
+                              <Select 
+                                value={fieldFormData.style?.fontWeight || 'normal'}
+                                onValueChange={(value) => setFieldFormData({ 
+                                  ...fieldFormData, 
+                                  style: { 
+                                    ...fieldFormData.style,
+                                    fontWeight: value
+                                  } 
+                                })}
+                              >
+                                <SelectTrigger id="fontWeight">
+                                  <SelectValue placeholder="اختر وزن الخط" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="normal">عادي</SelectItem>
+                                  <SelectItem value="bold">عريض</SelectItem>
+                                  <SelectItem value="100">رفيع جداً (100)</SelectItem>
+                                  <SelectItem value="300">رفيع (300)</SelectItem>
+                                  <SelectItem value="500">متوسط (500)</SelectItem>
+                                  <SelectItem value="700">عريض (700)</SelectItem>
+                                  <SelectItem value="900">عريض جداً (900)</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            
+                            <div className="grid gap-2">
+                              <Label htmlFor="fontSize">حجم الخط</Label>
+                              <Input
+                                id="fontSize"
+                                type="number"
+                                min="12"
+                                max="72"
+                                value={fieldFormData.style?.fontSize || 24}
+                                onChange={(e) => setFieldFormData({ 
+                                  ...fieldFormData, 
+                                  style: { 
+                                    ...fieldFormData.style,
+                                    fontSize: Number(e.target.value)
+                                  } 
+                                })}
+                              />
+                            </div>
+                          </div>
+                          
+                          <div className="grid gap-2 mt-2">
+                            <Label htmlFor="textColor">لون النص</Label>
+                            <div className="flex gap-2">
+                              <Input
+                                id="textColor"
+                                type="color"
+                                className="w-12 h-9 p-1"
+                                value={fieldFormData.style?.color || '#000000'}
+                                onChange={(e) => setFieldFormData({ 
+                                  ...fieldFormData, 
+                                  style: { 
+                                    ...fieldFormData.style,
+                                    color: e.target.value
+                                  } 
+                                })}
+                              />
+                              <Input
+                                value={fieldFormData.style?.color || '#000000'}
+                                onChange={(e) => setFieldFormData({ 
+                                  ...fieldFormData, 
+                                  style: { 
+                                    ...fieldFormData.style,
+                                    color: e.target.value
+                                  } 
+                                })}
+                                placeholder="#000000"
+                                className="flex-1"
+                              />
+                            </div>
+                          </div>
+                          
+                          <div className="grid gap-2 mt-2">
+                            <Label htmlFor="textAlign">محاذاة النص</Label>
+                            <Select 
+                              value={fieldFormData.style?.align || 'center'}
+                              onValueChange={(value) => setFieldFormData({ 
+                                ...fieldFormData, 
+                                style: { 
+                                  ...fieldFormData.style,
+                                  align: value
+                                } 
+                              })}
+                            >
+                              <SelectTrigger id="textAlign">
+                                <SelectValue placeholder="اختر محاذاة النص" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="center">وسط</SelectItem>
+                                <SelectItem value="right">يمين</SelectItem>
+                                <SelectItem value="left">يسار</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      <div>
+                        <Label className="mb-2 block">معاينة الموقع والتنسيق</Label>
+                        
+                        <div className="flex items-center justify-between mb-2">
+                          <p className="text-sm text-muted-foreground">انقر لتعيين موضع الحقل</p>
+                          <div className="flex items-center gap-2">
+                            <Switch 
+                              id="showGrid"
+                              checked={showGrid} 
+                              onCheckedChange={setShowGrid}
+                            />
+                            <Label htmlFor="showGrid" className="text-sm">إظهار الشبكة</Label>
+                          </div>
+                        </div>
+                        
+                        <div 
+                          className="relative mt-2 border rounded-md bg-gray-100 h-72 overflow-hidden cursor-crosshair"
+                          onClick={(e) => {
+                            // حساب النسبة المئوية للموضع استنادًا إلى النقرة
+                            const rect = e.currentTarget.getBoundingClientRect();
+                            const x = Math.round(((e.clientX - rect.left) / rect.width) * 100);
+                            const y = Math.round(((e.clientY - rect.top) / rect.height) * 100);
+                            
+                            // تحديث بيانات النموذج مع الموضع الجديد
+                            setFieldFormData({
+                              ...fieldFormData,
+                              position: { x, y }
+                            });
+                          }}
+                        >
+                          {/* صورة القالب الفعلية في الخلفية */}
+                          <div className="absolute inset-0">
+                            {template?.imageUrl ? (
+                              <img 
+                                src={template.imageUrl} 
+                                alt={template.title} 
+                                className="w-full h-full object-contain"
+                              />
+                            ) : (
+                              <div className="w-full h-full bg-cover bg-center flex items-center justify-center text-muted-foreground" 
+                                style={{ backgroundImage: "url('https://placehold.co/600x400/e2e8f0/cccccc?text=نموذج+القالب')" }}>
+                                <div className="bg-white/80 p-2 rounded text-sm">لا توجد صورة للقالب</div>
+                              </div>
+                            )}
+                          </div>
+                          
+                          {/* مؤشرات وشبكة التوجيه */}
+                          {showGrid && (
+                            <div className="absolute inset-0 pointer-events-none">
+                              <div className="absolute left-0 w-full h-0.5 border-t border-dashed border-gray-400/50" style={{ top: '25%' }}></div>
+                              <div className="absolute left-0 w-full h-0.5 border-t border-dashed border-gray-400/50" style={{ top: '50%' }}></div>
+                              <div className="absolute left-0 w-full h-0.5 border-t border-dashed border-gray-400/50" style={{ top: '75%' }}></div>
+                              
+                              <div className="absolute top-0 h-full w-0.5 border-l border-dashed border-gray-400/50" style={{ left: '25%' }}></div>
+                              <div className="absolute top-0 h-full w-0.5 border-l border-dashed border-gray-400/50" style={{ left: '50%' }}></div>
+                              <div className="absolute top-0 h-full w-0.5 border-l border-dashed border-gray-400/50" style={{ left: '75%' }}></div>
+                            </div>
+                          )}
+                          
+                          {/* معاينة النص مع التنسيق */}
+                          <div 
+                            className="absolute py-1 px-2 max-w-[80%] text-center pointer-events-none"
+                            style={{ 
+                              left: `${fieldFormData.position?.x || 50}%`, 
+                              top: `${fieldFormData.position?.y || 50}%`,
+                              color: fieldFormData.style?.color || '#000000',
+                              fontWeight: fieldFormData.style?.fontWeight || 'normal',
+                              fontSize: `${fieldFormData.style?.fontSize || 24}px`,
+                              textAlign: fieldFormData.style?.align || 'center',
+                              direction: 'rtl',
+                              transform: 'translate(-50%, -50%)',
+                              textShadow: '0 0 5px rgba(255, 255, 255, 0.7), 0 0 10px rgba(255, 255, 255, 0.5)'
+                            }}
+                          >
+                            {fieldFormData.defaultValue || fieldFormData.label || 'نص الحقل'}
+                          </div>
+                          
+                          {/* نقطة مرجعية توضح الموضع بالضبط */}
+                          <div 
+                            className="absolute h-3 w-3 bg-primary rounded-full pointer-events-none"
+                            style={{ 
+                              left: `${fieldFormData.position?.x || 50}%`, 
+                              top: `${fieldFormData.position?.y || 50}%`,
+                              transform: 'translate(-50%, -50%)',
+                              boxShadow: '0 0 0 2px white'
+                            }}
+                          ></div>
+                          
+                          {/* خطوط متقاطعة عند الموضع */}
+                          {showGrid && (
+                            <>
+                              <div
+                                className="absolute w-full h-px bg-primary opacity-40 pointer-events-none"
+                                style={{ top: `${fieldFormData.position?.y || 50}%` }}
+                              ></div>
+                              <div
+                                className="absolute h-full w-px bg-primary opacity-40 pointer-events-none"
+                                style={{ left: `${fieldFormData.position?.x || 50}%` }}
+                              ></div>
+                            </>
+                          )}
+                          
+                          {/* إحداثيات الموقع */}
+                          <div className="absolute top-2 left-2 text-xs bg-black/70 text-white px-2 py-1 rounded-md shadow-sm pointer-events-none">
+                            <span className="font-mono">({fieldFormData.position?.x || 50}%, {fieldFormData.position?.y || 50}%)</span>
+                          </div>
+                          
+                          {/* تسميات للتوضيح */}
+                          <div className="absolute top-1 right-2 text-xs bg-black/70 text-white px-1 rounded pointer-events-none">0%</div>
+                          <div className="absolute bottom-1 right-2 text-xs bg-black/70 text-white px-1 rounded pointer-events-none">100%</div>
+                          {showGrid && (
+                            <>
+                              <div className="absolute top-[25%] right-2 text-xs bg-black/70 text-white px-1 rounded -translate-y-1/2 pointer-events-none">25%</div>
+                              <div className="absolute top-[50%] right-2 text-xs bg-black/70 text-white px-1 rounded -translate-y-1/2 pointer-events-none">50%</div>
+                              <div className="absolute top-[75%] right-2 text-xs bg-black/70 text-white px-1 rounded -translate-y-1/2 pointer-events-none">75%</div>
+                            </>
+                          )}
+                        </div>
+                        <div className="flex items-center justify-between mt-2">
+                          <Button 
+                            type="button" 
+                            variant="outline" 
+                            size="sm"
+                            onClick={() => setFieldFormData({
+                              ...fieldFormData,
+                              position: { x: 50, y: 50 }
+                            })}
+                          >
+                            تمركز في الوسط
+                          </Button>
+                          <p className="text-xs text-muted-foreground text-center">
+                            انقر في أي مكان بالصورة لتعيين موضع الحقل
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </TabsContent>
+                  
+                  <TabsContent value="options" className="mt-2">
+                    {(fieldFormData.type === 'select' || fieldFormData.type === 'radio') ? (
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                          <Label>الخيارات</Label>
+                          <p className="text-sm text-muted-foreground">
+                            عدد الخيارات: {fieldFormData.options?.length || 0}
+                          </p>
+                        </div>
+                        
+                        <div className="flex gap-2">
+                          <Input
+                            value={newOption}
+                            onChange={(e) => setNewOption(e.target.value)}
+                            placeholder="أضف خيار جديد"
+                          />
+                          <Button type="button" variant="secondary" onClick={handleAddOption}>
+                            إضافة
+                          </Button>
+                        </div>
+                        
+                        <div className="border rounded-md">
+                          {fieldFormData.options?.length ? (
+                            <div className="p-1 divide-y">
+                              {fieldFormData.options.map((option, index) => (
+                                <div key={index} className="flex items-center justify-between py-2 px-3">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-sm font-medium">{index + 1}.</span>
+                                    <span>{option}</span>
+                                  </div>
+                                  <div className="flex items-center gap-1">
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="icon"
+                                      onClick={() => {
+                                        if (index > 0) {
+                                          const newOptions = [...fieldFormData.options!];
+                                          [newOptions[index], newOptions[index - 1]] = [newOptions[index - 1], newOptions[index]];
+                                          setFieldFormData({
+                                            ...fieldFormData,
+                                            options: newOptions
+                                          });
+                                        }
+                                      }}
+                                      disabled={index === 0}
+                                    >
+                                      <ChevronUp className="h-4 w-4" />
+                                    </Button>
+                                    
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="icon"
+                                      onClick={() => {
+                                        if (index < fieldFormData.options!.length - 1) {
+                                          const newOptions = [...fieldFormData.options!];
+                                          [newOptions[index], newOptions[index + 1]] = [newOptions[index + 1], newOptions[index]];
+                                          setFieldFormData({
+                                            ...fieldFormData,
+                                            options: newOptions
+                                          });
+                                        }
+                                      }}
+                                      disabled={index === fieldFormData.options!.length - 1}
+                                    >
+                                      <ChevronDown className="h-4 w-4" />
+                                    </Button>
+                                    
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="icon"
+                                      onClick={() => handleRemoveOption(index)}
+                                      className="text-destructive hover:text-destructive/90"
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="py-8 text-center">
+                              <p className="text-sm text-muted-foreground">لا توجد خيارات حتى الآن</p>
+                              <p className="text-xs text-muted-foreground mt-1">أضف خيارات للحقل باستخدام النموذج أعلاه</p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="py-8 text-center">
+                        <p className="text-sm text-muted-foreground">لا توجد خيارات متاحة لهذا النوع من الحقول</p>
+                        <p className="text-xs text-muted-foreground mt-2">
+                          الخيارات متاحة فقط لحقول القوائم المنسدلة والخيارات المتعددة
+                        </p>
+                      </div>
                     )}
-                    {editingField ? 'تحديث الحقل' : 'إضافة الحقل'}
-                  </Button>
-                </DialogFooter>
+                  </TabsContent>
+                </Tabs>
+                
+                <div className="mt-6 border-t pt-4">
+                  <DialogFooter>
+                    <Button 
+                      type="submit" 
+                      className="w-full sm:w-auto"
+                      disabled={createFieldMutation.isPending || updateFieldMutation.isPending}
+                    >
+                      {(createFieldMutation.isPending || updateFieldMutation.isPending) && (
+                        <Loader2 className="ml-2 h-4 w-4 animate-spin" />
+                      )}
+                      {editingField ? 'تحديث الحقل' : 'إضافة الحقل'}
+                    </Button>
+                  </DialogFooter>
+                </div>
               </form>
             </DialogContent>
           </Dialog>
@@ -635,30 +1026,33 @@ export default function TemplateFieldsPage() {
                             <Button
                               variant="ghost"
                               size="icon"
-                              disabled={index === 0 || reorderFieldMutation.isPending}
-                              onClick={() => reorderFieldMutation.mutate({ id: field.id, direction: 'up' })}
+                              onClick={() => updateOrderMutation.mutate({ id: field.id, direction: 'up' })}
+                              disabled={index === 0 || updateOrderMutation.isPending}
+                              className="h-6 w-6"
                             >
                               <ChevronUp className="h-4 w-4" />
                             </Button>
                             <Button
                               variant="ghost"
                               size="icon"
-                              disabled={index === fields.length - 1 || reorderFieldMutation.isPending}
-                              onClick={() => reorderFieldMutation.mutate({ id: field.id, direction: 'down' })}
+                              onClick={() => updateOrderMutation.mutate({ id: field.id, direction: 'down' })}
+                              disabled={index === fields.length - 1 || updateOrderMutation.isPending}
+                              className="h-6 w-6"
                             >
                               <ChevronDown className="h-4 w-4" />
                             </Button>
                           </div>
                         </div>
                       </TableCell>
-                      <TableCell>{field.name}</TableCell>
                       <TableCell>
-                        <div>
-                          <div>{field.label}</div>
-                          {field.labelAr && (
-                            <div className="text-xs text-muted-foreground">{field.labelAr}</div>
-                          )}
+                        <div className="font-medium">{field.name}</div>
+                        <div className="text-xs text-muted-foreground mt-1">
+                          محاذاة: {field.style?.align || 'وسط'}, حجم: {field.style?.fontSize || 'افتراضي'}
                         </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="font-medium">{field.label}</div>
+                        {field.labelAr && <div className="text-muted-foreground mt-1">{field.labelAr}</div>}
                       </TableCell>
                       <TableCell className="text-center">
                         {field.type === 'text' && 'نص قصير'}
@@ -666,39 +1060,41 @@ export default function TemplateFieldsPage() {
                         {field.type === 'number' && 'رقم'}
                         {field.type === 'date' && 'تاريخ'}
                         {field.type === 'time' && 'وقت'}
-                        {field.type === 'checkbox' && 'اختيار (نعم/لا)'}
                         {field.type === 'select' && 'قائمة منسدلة'}
                         {field.type === 'radio' && 'خيارات متعددة'}
-                        {field.type === 'image' && 'صورة'}
+                        {field.type === 'checkbox' && 'اختيار (نعم/لا)'}
                       </TableCell>
                       <TableCell className="text-center">
                         {field.required ? (
-                          <span className="text-green-600">نعم</span>
+                          <span className="inline-flex items-center justify-center h-5 w-5 rounded-full bg-primary/20 text-primary">
+                            <span className="sr-only">مطلوب</span>
+                            ✓
+                          </span>
                         ) : (
-                          <span className="text-muted-foreground">لا</span>
+                          <span className="inline-flex items-center justify-center h-5 w-5 rounded-full bg-muted text-muted-foreground">
+                            <span className="sr-only">غير مطلوب</span>
+                            -
+                          </span>
                         )}
                       </TableCell>
-                      <TableCell className="text-center">
+                      <TableCell>
                         <div className="flex items-center justify-center gap-2">
                           <Button
                             variant="ghost"
                             size="icon"
-                            onClick={() => openEditDialog(field)}
+                            onClick={() => handleEditField(field)}
                           >
                             <Pencil className="h-4 w-4" />
+                            <span className="sr-only">تعديل</span>
                           </Button>
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="text-destructive"
-                            onClick={() => {
-                              if (window.confirm('هل أنت متأكد من حذف هذا الحقل؟')) {
-                                deleteFieldMutation.mutate(field.id);
-                              }
-                            }}
-                            disabled={deleteFieldMutation.isPending}
+                            onClick={() => handleDeleteField(field.id)}
+                            className="text-destructive hover:text-destructive hover:bg-destructive/10"
                           >
                             <Trash2 className="h-4 w-4" />
+                            <span className="sr-only">حذف</span>
                           </Button>
                         </div>
                       </TableCell>
@@ -709,7 +1105,11 @@ export default function TemplateFieldsPage() {
             </div>
           ) : (
             <div className="text-center py-8">
-              <p className="text-muted-foreground">لا توجد حقول للقالب. قم بإضافة بعض الحقول.</p>
+              <p className="text-muted-foreground mb-4">لا توجد حقول لهذا القالب حتى الآن</p>
+              <Button onClick={() => setIsDialogOpen(true)}>
+                <Plus className="ml-2 h-4 w-4" />
+                إضافة حقل جديد
+              </Button>
             </div>
           )}
         </CardContent>

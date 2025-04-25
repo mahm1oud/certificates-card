@@ -1,98 +1,96 @@
-import { type ClassValue, clsx } from "clsx";
-import { twMerge } from "tailwind-merge";
+import { type ClassValue, clsx } from "clsx"
+import { twMerge } from "tailwind-merge"
 
 export function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs));
+  return twMerge(clsx(inputs))
 }
 
-export function formatDate(date: string): string {
-  // Format date to Arabic style
-  const dateObj = new Date(date);
-  const options: Intl.DateTimeFormatOptions = {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  };
-  
-  return new Intl.DateTimeFormat('ar-SA', options).format(dateObj);
+export function formatPercentage(value: number): string {
+  return `${Math.round(value * 100)}%`
 }
 
-export function formatTime(time: string): string {
-  // Format time (HH:MM) to Arabic style
-  const [hours, minutes] = time.split(':');
-  const timeObj = new Date();
-  timeObj.setHours(parseInt(hours, 10));
-  timeObj.setMinutes(parseInt(minutes, 10));
-  
-  const options: Intl.DateTimeFormatOptions = {
-    hour: 'numeric',
-    minute: 'numeric',
-    hour12: true
-  };
-  
-  return new Intl.DateTimeFormat('ar-SA', options).format(timeObj);
+export function hexToRgba(hex: string, alpha = 1): string {
+  // Remove the hash if it exists
+  hex = hex.replace('#', '')
+
+  // Parse the hex values
+  const r = parseInt(hex.substring(0, 2), 16)
+  const g = parseInt(hex.substring(2, 4), 16)
+  const b = parseInt(hex.substring(4, 6), 16)
+
+  // Return the rgba value
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`
 }
 
-export function base64ToBlob(base64: string, type: string): Blob {
-  const byteCharacters = atob(base64.split(',')[1]);
-  const byteArrays = [];
+export function rgbaToHex(rgba: string): string {
+  // Extract the r, g, b values from the rgba string
+  const match = rgba.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*(\d+(?:\.\d+)?))?\)/)
+  if (!match) return '#000000'
 
-  for (let i = 0; i < byteCharacters.length; i++) {
-    byteArrays.push(byteCharacters.charCodeAt(i));
+  const r = parseInt(match[1])
+  const g = parseInt(match[2])
+  const b = parseInt(match[3])
+
+  // Convert to hex
+  return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`
+}
+
+export function debounce<T extends (...args: any[]) => any>(
+  func: T,
+  wait: number
+): (...args: Parameters<T>) => void {
+  let timeout: NodeJS.Timeout | null = null
+
+  return function executedFunction(...args: Parameters<T>) {
+    const later = () => {
+      timeout = null
+      func(...args)
+    }
+
+    if (timeout) {
+      clearTimeout(timeout)
+    }
+    timeout = setTimeout(later, wait)
   }
-
-  const byteArray = new Uint8Array(byteArrays);
-  return new Blob([byteArray], { type });
 }
 
-export function downloadImage(imageUrl: string, filename: string): Promise<void> {
-  console.log(`Downloading image from: ${imageUrl}, filename: ${filename}`);
-  
-  // Handle case where imageUrl is a relative path
-  const fullUrl = imageUrl.startsWith('http') 
-    ? imageUrl 
-    : `${window.location.origin}${imageUrl}`;
-  
-  console.log(`Full image URL: ${fullUrl}`);
-  
-  return new Promise<void>((resolve, reject) => {
-    fetch(fullUrl)
-      .then(response => {
-        if (!response.ok) {
-          console.error(`Error downloading image: ${response.status} ${response.statusText}`);
-          throw new Error(`Error downloading image: ${response.status} ${response.statusText}`);
-        }
-        return response.blob();
-      })
-      .then(blob => {
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = filename;
-        document.body.appendChild(a);
-        a.click();
-        window.URL.revokeObjectURL(url);
-        document.body.removeChild(a);
-        console.log('Image download successful');
-        resolve();
-      })
-      .catch(error => {
-        console.error('Error downloading image:', error);
-        alert('حدث خطأ أثناء تنزيل الصورة. يرجى المحاولة مرة أخرى.');
-        reject(error);
-      });
-  });
+// Format date to a readable string (e.g., "25 Apr 2025")
+export function formatDate(date: Date | string | number): string {
+  const d = new Date(date)
+  return d.toLocaleDateString('ar-SA', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric'
+  })
 }
 
-export function getCategoryName(categorySlug: string): string {
-  const categories: Record<string, string> = {
-    'wedding': 'دعوات زفاف',
-    'engagement': 'دعوات خطوبة',
-    'graduation': 'تهنئة تخرج',
-    'eid': 'بطاقات عيد',
-    'ramadan': 'بطاقات رمضانية',
-    'other': 'بطاقة مخصصة',
-  };
+// Format time to a readable string (e.g., "03:45 PM")
+export function formatTime(date: Date | string | number): string {
+  const d = new Date(date)
+  return d.toLocaleTimeString('ar-SA', {
+    hour: '2-digit',
+    minute: '2-digit'
+  })
+}
+
+// Download an image from a URL
+export function downloadImage(url: string, filename: string): void {
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename || 'image'
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+}
+
+// Get category name based on ID or slug
+export function getCategoryName(categoryId: number | string, categories: any[]): string {
+  if (!categories || !categories.length) return '';
   
-  return categories[categorySlug] || 'بطاقة مخصصة';
+  const category = categories.find(cat => 
+    (typeof categoryId === 'number' && cat.id === categoryId) || 
+    (typeof categoryId === 'string' && cat.slug === categoryId)
+  );
+  
+  return category ? category.name : '';
 }

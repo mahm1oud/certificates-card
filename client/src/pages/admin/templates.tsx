@@ -56,6 +56,7 @@ import {
   Image,
   Filter,
   Eye,
+  Layout,
 } from "lucide-react";
 import { useState } from "react";
 import { Link } from "wouter";
@@ -395,10 +396,18 @@ function TemplatesTable({
                               تعديل
                             </Link>
                           </DropdownMenuItem>
-                          <DropdownMenuItem asChild>
+                          <DropdownMenuItem asChild className="text-primary">
                             <Link href={`/admin/templates/${template.id}/fields`}>
                               <Eye className="h-4 w-4 ml-2" />
-                              إدارة الحقول
+                              <span className="flex-1">إدارة الحقول</span>
+                              <span className="px-1.5 py-0.5 rounded text-[10px] bg-primary/10 text-primary">محسن</span>
+                            </Link>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem asChild className="text-primary">
+                            <Link href={`/admin/template-editor/${template.id}`}>
+                              <Layout className="h-4 w-4 ml-2" />
+                              <span className="flex-1">محرر التخطيط</span>
+                              <span className="px-1.5 py-0.5 rounded text-[10px] bg-purple-500/10 text-purple-500">جديد</span>
                             </Link>
                           </DropdownMenuItem>
                           <DropdownMenuItem 

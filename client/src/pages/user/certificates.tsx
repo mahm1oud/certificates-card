@@ -85,7 +85,7 @@ export default function UserCertificatesPage() {
   });
   
   // Safely access certificates array
-  const certificates = (data?.certificates || []) as Certificate[];
+  const certificates = Array.isArray(data?.certificates) ? data.certificates : [] as Certificate[];
 
   // Delete certificate mutation
   const deleteCertificateMutation = useMutation({

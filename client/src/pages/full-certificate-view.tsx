@@ -10,6 +10,7 @@ import {
   DialogContent, 
   DialogHeader, 
   DialogTitle,
+  DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -17,6 +18,7 @@ import { Label } from "@/components/ui/label";
 import { Award, ChevronLeft, Download, Share2, Copy, Check, QrCode, Mail, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { downloadImage } from "@/lib/utils";
+import ShareOptions from "@/components/share-options";
 
 type Certificate = {
   id: number;
@@ -210,8 +212,8 @@ export default function FullCertificateView() {
           </Button>
           
           <Button variant="outline" onClick={() => setIsShareDialogOpen(true)}>
-            <Mail className="ml-2 h-4 w-4" />
-            مشاركة عبر البريد
+            <Share2 className="ml-2 h-4 w-4" />
+            مشاركة الشهادة
           </Button>
           
           <Button variant="outline" onClick={handleCopyLink}>
@@ -325,46 +327,41 @@ export default function FullCertificateView() {
               alt="QR Code" 
               className="mx-auto mb-2 max-w-[150px]" 
             />
-            <p className="text-sm text-muted-foreground">
+            <p className="text-sm text-muted-foreground mb-4">
               امسح رمز QR للتحقق من صحة الشهادة
             </p>
           </div>
+          
+          {/* زر مشاركة الشهادة */}
+          <Card>
+            <CardContent className="p-4">
+              <Button 
+                variant="outline" 
+                className="w-full" 
+                onClick={() => setIsShareDialogOpen(true)}
+              >
+                <Share2 className="ml-2 h-4 w-4" />
+                مشاركة الشهادة
+              </Button>
+            </CardContent>
+          </Card>
         </div>
       </div>
       
-      {/* Email Share Dialog */}
+      {/* Share Dialog */}
       <Dialog open={isShareDialogOpen} onOpenChange={setIsShareDialogOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>مشاركة عبر البريد الإلكتروني</DialogTitle>
+            <DialogTitle>مشاركة الشهادة</DialogTitle>
+            <DialogDescription>
+              شارك هذه الشهادة مع العائلة والأصدقاء
+            </DialogDescription>
           </DialogHeader>
-          <form onSubmit={handleSendEmail}>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="email">عنوان البريد الإلكتروني</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="أدخل عنوان البريد الإلكتروني"
-                  value={shareEmail}
-                  onChange={(e) => setShareEmail(e.target.value)}
-                  required
-                />
-              </div>
-            </div>
-            <DialogFooter>
-              <Button type="submit" disabled={isSending}>
-                {isSending ? (
-                  <>
-                    <Loader2 className="ml-2 h-4 w-4 animate-spin" />
-                    جاري الإرسال...
-                  </>
-                ) : (
-                  "إرسال"
-                )}
-              </Button>
-            </DialogFooter>
-          </form>
+          <ShareOptions 
+            cardId={certificate.publicId} 
+            cardType="certificate" 
+            imageUrl={certificate.imageUrl} 
+          />
         </DialogContent>
       </Dialog>
       

@@ -38,6 +38,7 @@ import {
   MessageCircle // تغيير من Whatsapp إلى MessageCircle
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import ShareOptions from "@/components/share-options";
 import { downloadImage } from "@/lib/utils";
 import { useAuth } from "@/hooks/use-auth";
 import { Link } from "wouter";
@@ -256,9 +257,11 @@ export default function FullCardView() {
     return (
       <div className="container mx-auto py-10 max-w-5xl">
         <div className="mb-6">
-          <Button variant="outline" size="sm" asComponent="a" href="/">
-            <ArrowLeft className="h-4 w-4 ml-2" />
-            العودة للرئيسية
+          <Button variant="outline" size="sm" asChild>
+            <Link href="/">
+              <ArrowLeft className="h-4 w-4 ml-2" />
+              العودة للرئيسية
+            </Link>
           </Button>
         </div>
         <Card className="text-center py-16">
@@ -381,15 +384,13 @@ export default function FullCardView() {
                 </div>
 
                 {Object.keys(card.formData || {}).length > 0 && (
-                  <div className="mt-6">
-                    <h4 className="text-sm font-medium mb-2">بيانات البطاقة:</h4>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-muted/50 p-4 rounded-md">
+                  <div className="mt-4">
+                    <h3 className="text-sm font-medium text-muted-foreground mb-2">بيانات البطاقة</h3>
+                    <div className="bg-muted p-3 rounded-md space-y-2">
                       {Object.entries(card.formData).map(([key, value]) => (
                         <div key={key}>
-                          <h5 className="text-sm font-medium text-muted-foreground mb-1">
-                            {key}
-                          </h5>
-                          <p>{typeof value === 'string' ? value : JSON.stringify(value)}</p>
+                          <h4 className="text-xs font-medium">{key}</h4>
+                          <p className="text-sm">{String(value)}</p>
                         </div>
                       ))}
                     </div>
@@ -397,57 +398,7 @@ export default function FullCardView() {
                 )}
               </CardContent>
             </Card>
-
-            <div className="space-y-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle>مشاركة البطاقة</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="flex gap-2 justify-center">
-                    <Button variant="outline" size="icon" onClick={() => shareVia('facebook')}>
-                      <Facebook className="h-5 w-5 text-blue-600" />
-                    </Button>
-                    <Button variant="outline" size="icon" onClick={() => shareVia('twitter')}>
-                      <Twitter className="h-5 w-5 text-sky-400" />
-                    </Button>
-                    <Button variant="outline" size="icon" onClick={() => shareVia('whatsapp')}>
-                      <MessageCircle className="h-5 w-5 text-green-500" />
-                    </Button>
-                    <Button variant="outline" size="icon" onClick={() => shareVia('linkedin')}>
-                      <Linkedin className="h-5 w-5 text-blue-700" />
-                    </Button>
-                  </div>
-                  
-                  <div className="flex gap-2">
-                    <Input
-                      value={window.location.href}
-                      readOnly
-                      className="text-xs"
-                    />
-                    <Button 
-                      variant="outline" 
-                      size="icon"
-                      onClick={handleCopyLink}
-                    >
-                      {isCopied ? (
-                        <Check className="h-4 w-4 text-green-500" />
-                      ) : (
-                        <Copy className="h-4 w-4" />
-                      )}
-                    </Button>
-                  </div>
-                  
-                  <Button 
-                    onClick={() => setIsShareDialogOpen(true)}
-                    className="w-full"
-                  >
-                    <Mail className="h-4 w-4 ml-2" />
-                    مشاركة عبر البريد الإلكتروني
-                  </Button>
-                </CardContent>
-              </Card>
-
+            <div className="space-y-4">
               {card.template && (
                 <Card>
                   <CardHeader>
@@ -474,128 +425,20 @@ export default function FullCardView() {
 
       {/* Share Dialog */}
       <Dialog open={isShareDialogOpen} onOpenChange={setIsShareDialogOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>مشاركة البطاقة</DialogTitle>
             <DialogDescription>
               شارك هذه البطاقة مع العائلة والأصدقاء
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <h3 className="font-medium">مشاركة عبر وسائل التواصل</h3>
-              <div className="flex gap-2">
-                <Button variant="outline" className="flex-1" onClick={() => shareVia('facebook')}>
-                  <Facebook className="h-4 w-4 ml-2 text-blue-600" />
-                  فيسبوك
-                </Button>
-                <Button variant="outline" className="flex-1" onClick={() => shareVia('twitter')}>
-                  <Twitter className="h-4 w-4 ml-2 text-sky-400" />
-                  تويتر
-                </Button>
-                <Button variant="outline" className="flex-1" onClick={() => shareVia('whatsapp')}>
-                  <MessageCircle className="h-4 w-4 ml-2 text-green-500" />
-                  واتساب
-                </Button>
-              </div>
-            </div>
-            
-            <div className="space-y-2 pt-2">
-              <h3 className="font-medium">مشاركة الرابط</h3>
-              <div className="flex">
-                <Input
-                  value={window.location.href}
-                  readOnly
-                  className="ml-2"
-                />
-                <Button 
-                  variant="outline" 
-                  onClick={handleCopyLink}
-                >
-                  {isCopied ? (
-                    <Check className="h-4 w-4 ml-1 text-green-500" />
-                  ) : (
-                    <Copy className="h-4 w-4 ml-1" />
-                  )}
-                  نسخ
-                </Button>
-              </div>
-            </div>
-            
-            <form onSubmit={handleEmailShare} className="space-y-2 pt-2">
-              <h3 className="font-medium">مشاركة عبر البريد الإلكتروني</h3>
-              <div className="flex items-end gap-2">
-                <div className="flex-1">
-                  <Label htmlFor="email" className="sr-only">
-                    البريد الإلكتروني
-                  </Label>
-                  <Input
-                    id="email"
-                    placeholder="أدخل البريد الإلكتروني"
-                    type="email"
-                    value={shareEmail}
-                    onChange={(e) => setShareEmail(e.target.value)}
-                    required
-                  />
-                </div>
-                <Button 
-                  type="submit"
-                  disabled={isSending || !shareEmail}
-                >
-                  {isSending ? (
-                    <Loader2 className="h-4 w-4 ml-2 animate-spin" />
-                  ) : (
-                    <Mail className="h-4 w-4 ml-2" />
-                  )}
-                  إرسال
-                </Button>
-              </div>
-            </form>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsShareDialogOpen(false)}>
-              إغلاق
-            </Button>
-          </DialogFooter>
+          <ShareOptions 
+            cardId={card.publicId} 
+            cardType="card" 
+            imageUrl={card.imageUrl} 
+          />
         </DialogContent>
       </Dialog>
-
-      {/* Navigation buttons on mobile */}
-      <div className="fixed bottom-4 left-4 right-4 flex justify-between md:hidden">
-        <Button 
-          size="icon" 
-          variant="outline" 
-          className="rounded-full bg-background/80 backdrop-blur-sm"
-          onClick={handleBackClick}
-        >
-          <ArrowLeft className="h-5 w-5" />
-        </Button>
-        
-        <div className="flex gap-2">
-          <Button 
-            size="icon" 
-            variant="outline" 
-            className="rounded-full bg-background/80 backdrop-blur-sm"
-            onClick={handleDownload}
-            disabled={isDownloading}
-          >
-            {isDownloading ? (
-              <Loader2 className="h-5 w-5 animate-spin" />
-            ) : (
-              <Download className="h-5 w-5" />
-            )}
-          </Button>
-          
-          <Button 
-            size="icon" 
-            variant="outline" 
-            className="rounded-full bg-background/80 backdrop-blur-sm"
-            onClick={() => setIsShareDialogOpen(true)}
-          >
-            <Share2 className="h-5 w-5" />
-          </Button>
-        </div>
-      </div>
     </div>
   );
 }

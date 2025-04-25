@@ -308,6 +308,13 @@ export default function AdminDashboardPage() {
                           إدارة التصنيفات
                         </Link>
                       </Button>
+                      <Button asChild variant="outline" className="w-full justify-start text-primary" style={{ borderColor: "#0ea5e9", borderWidth: "1.5px" }}>
+                        <Link href="/admin/templates">
+                          <Layers className="h-4 w-4 ml-2" />
+                          <span className="flex-1">القوالب والحقول</span>
+                          <span className="px-1.5 py-0.5 rounded text-[10px] bg-primary/10 text-primary">جديد</span>
+                        </Link>
+                      </Button>
                       <Button asChild variant="outline" className="w-full justify-start">
                         <Link href="/admin/users">
                           <Users className="h-4 w-4 ml-2" />
@@ -324,6 +331,13 @@ export default function AdminDashboardPage() {
                         <Link href="/admin/cards">
                           <FileImage className="h-4 w-4 ml-2" />
                           إدارة البطاقات
+                        </Link>
+                      </Button>
+                      <Button asChild variant="outline" className="w-full justify-start text-primary" style={{ borderColor: "#0ea5e9", borderWidth: "1.5px" }}>
+                        <Link href="/admin/social-auth-settings">
+                          <Users className="h-4 w-4 ml-2" />
+                          <span className="flex-1">إعدادات المصادقة الاجتماعية</span>
+                          <span className="px-1.5 py-0.5 rounded text-[10px] bg-primary/10 text-primary">جديد</span>
                         </Link>
                       </Button>
                     </div>

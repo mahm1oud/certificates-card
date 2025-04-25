@@ -12,6 +12,7 @@ import Header from "@/components/header";
 import Footer from "@/components/footer";
 import { AuthProvider } from "@/hooks/use-auth";
 import { ProtectedRoute } from "@/lib/protected-route";
+import { I18nProvider, useTranslation } from "@/lib/i18n";
 import { lazy, Suspense } from "react";
 import { Loader2 } from "lucide-react";
 
@@ -22,6 +23,7 @@ const AdminCategories = lazy(() => import("@/pages/admin/categories"));
 const AdminTemplates = lazy(() => import("@/pages/admin/templates"));
 const AdminTemplateEdit = lazy(() => import("@/pages/admin/template-edit"));
 const AdminTemplateFields = lazy(() => import("@/pages/admin/template-fields"));
+const AdminTemplateEditor = lazy(() => import("@/pages/admin/template-editor/index"));
 const AdminUsers = lazy(() => import("@/pages/admin/users"));
 const AdminCards = lazy(() => import("@/pages/admin/cards"));
 const AdminCertificates = lazy(() => import("@/pages/admin/certificates"));
@@ -43,8 +45,9 @@ const LazyLoadingFallback = () => (
 );
 
 function Router() {
+  const { dir } = useTranslation();
   return (
-    <div dir="rtl" className="flex flex-col min-h-screen">
+    <div dir={dir()} className="flex flex-col min-h-screen">
       <Header />
       <main className="flex-grow">
         <Suspense fallback={<LazyLoadingFallback />}>
@@ -73,6 +76,7 @@ function Router() {
             <ProtectedRoute path="/admin/templates/new" component={AdminTemplateEdit} adminOnly />
             <ProtectedRoute path="/admin/templates/:templateId" component={AdminTemplateEdit} adminOnly />
             <ProtectedRoute path="/admin/templates/:templateId/fields" component={AdminTemplateFields} adminOnly />
+            <ProtectedRoute path="/admin/template-editor/:id" component={AdminTemplateEditor} adminOnly />
             <ProtectedRoute path="/admin/users" component={AdminUsers} adminOnly />
             <ProtectedRoute path="/admin/cards" component={AdminCards} adminOnly />
             <ProtectedRoute path="/admin/certificates" component={AdminCertificates} adminOnly />
@@ -92,10 +96,12 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <AuthProvider>
-          <Toaster />
-          <Router />
-        </AuthProvider>
+        <I18nProvider>
+          <AuthProvider>
+            <Toaster />
+            <Router />
+          </AuthProvider>
+        </I18nProvider>
       </TooltipProvider>
     </QueryClientProvider>
   );
