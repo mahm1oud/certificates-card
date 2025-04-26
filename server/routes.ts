@@ -19,6 +19,9 @@ import {
   categories
 } from "@shared/schema";
 import { db } from "./db";
+import adminSettingsRouter from './api/admin-settings';
+import authSettingsRouter from './api/auth-settings';
+import adminStatsRouter from './api/admin-stats';
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Setup directory structure
@@ -33,6 +36,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Create temp directory for temporary files
   if (!fs.existsSync(tempDir)) {
     fs.mkdirSync(tempDir, { recursive: true });
+  }
+  
+  // Servir archivos estáticos desde client/static
+  const staticDir = path.join(process.cwd(), "client/static");
+  if (fs.existsSync(staticDir)) {
+    app.use('/static', express.static(staticDir));
+    console.log("Serving static files from:", staticDir);
   }
   
   // Setup file upload middleware
@@ -1520,6 +1530,65 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ message: 'حدث خطأ أثناء تحديث بيانات التخطيط' });
     }
   });
+
+  // Generate social media image from card
+  app.post("/api/cards/:cardId/social", async (req, res) => {
+    try {
+      const { cardId } = req.params;
+      const { format, options = {} } = req.body;
+      
+      if (!format) {
+        return res.status(400).json({ message: "نوع الصورة مطلوب" });
+      }
+      
+      // Get the card
+      const card = await storage.getCardByPublicId(cardId) || await storage.getCard(Number(cardId));
+      
+      if (!card) {
+        return res.status(404).json({ message: "البطاقة غير موجودة" });
+      }
+      
+      // Import social image generator
+      const { generateSocialImage } = await import('./lib/social-image-generator');
+      
+      // Generate social media image
+      const imagePath = await generateSocialImage(
+        card.imageUrl,
+        format,
+        {
+          quality: options.quality || 'medium',
+          watermark: options.watermark,
+          watermarkText: options.watermarkText,
+          cropMode: options.cropMode || 'fit'
+        }
+      );
+      
+      res.json({
+        success: true,
+        imageUrl: imagePath
+      });
+    } catch (error) {
+      console.error("Error generating social media image:", error);
+      res.status(500).json({ message: "حدث خطأ أثناء إنشاء صورة لوسائل التواصل الاجتماعي" });
+    }
+  });
+  
+  // Get available social media formats
+  app.get("/api/social-formats", async (req, res) => {
+    try {
+      const { getSocialFormats } = await import('./lib/social-image-generator');
+      const formats = await getSocialFormats();
+      res.json({ formats });
+    } catch (error) {
+      console.error("Error fetching social formats:", error);
+      res.status(500).json({ message: "حدث خطأ أثناء جلب تنسيقات الوسائط الاجتماعية" });
+    }
+  });
+
+  // تسجيل مسارات API الإدارية
+  app.use('/api/admin/settings', adminSettingsRouter);
+  app.use('/api/auth-settings', authSettingsRouter);
+  app.use('/api/admin', adminStatsRouter);
 
   // Create HTTP server
   const httpServer = createServer(app);

@@ -320,6 +320,32 @@ export type Setting = typeof settings.$inferSelect;
 // تعريف العلاقات بعد تعريف جميع الجداول
 // Define relations after all tables are defined
 
+// Auth Settings schema - إعدادات المصادقة
+export const authSettings = pgTable("auth_settings", {
+  id: serial("id").primaryKey(),
+  provider: text("provider").notNull(), // google, facebook, twitter, linkedin, etc.
+  clientId: text("client_id"),
+  clientSecret: text("client_secret"),
+  redirectUri: text("redirect_uri"),
+  enabled: boolean("enabled").default(false).notNull(),
+  settings: json("settings").default({}),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  updatedBy: integer("updated_by").references(() => users.id),
+});
+
+export const insertAuthSettingSchema = createInsertSchema(authSettings).pick({
+  provider: true,
+  clientId: true,
+  clientSecret: true,
+  redirectUri: true,
+  enabled: true,
+  settings: true,
+  updatedBy: true,
+});
+
+export type InsertAuthSetting = z.infer<typeof insertAuthSettingSchema>;
+export type AuthSetting = typeof authSettings.$inferSelect;
+
 export const usersRelations = relations(users, ({ many }) => ({
   cards: many(cards),
   certificates: many(certificates),
