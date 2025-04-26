@@ -57,18 +57,19 @@ export default function HomePage() {
     queryFn: getQueryFn({ on401: "redirect-to-login" }),
   });
   
-  // Filter templates by type (card or certificate)
-  const cardTemplates = {
-    templates: (allTemplates?.templates || []).filter((template: any) => 
-      !template.certificateType || template.certificateType === 'card'
-    )
-  };
+  // Normalize allTemplates structure since API returns different format based on endpoint
+  const normalizedTemplates = Array.isArray(allTemplates) 
+    ? allTemplates  // For category-specific templates, API returns array directly
+    : allTemplates?.templates || []; // For all templates, API returns {templates, total}
   
-  const certificateTemplates = {
-    templates: (allTemplates?.templates || []).filter((template: any) => 
-      template.certificateType && template.certificateType !== 'card'
-    )
-  };
+  // Filter templates by type (card or certificate)
+  const cardTemplates = normalizedTemplates.filter((template: any) => 
+    !template.certificateType || template.certificateType === 'card'
+  );
+  
+  const certificateTemplates = normalizedTemplates.filter((template: any) => 
+    template.certificateType && template.certificateType !== 'card'
+  );
   
   // Update URL when category or tab changes
   useEffect(() => {
@@ -87,17 +88,17 @@ export default function HomePage() {
   }, [selectedCategory, selectedTab, setLocation]);
   
   // Filter templates based on search query
-  const filteredCardTemplates = cardTemplates?.templates?.filter((template: any) => {
+  const filteredCardTemplates = cardTemplates.filter((template: any) => {
     return !searchQuery || 
       template.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (template.titleAr && template.titleAr.toLowerCase().includes(searchQuery.toLowerCase()));
-  }) || [];
+  });
   
-  const filteredCertificateTemplates = certificateTemplates?.templates?.filter((template: any) => {
+  const filteredCertificateTemplates = certificateTemplates.filter((template: any) => {
     return !searchQuery || 
       template.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (template.titleAr && template.titleAr.toLowerCase().includes(searchQuery.toLowerCase()));
-  }) || [];
+  });
   
   // Get icon for category
   const getCategoryIcon = (slug: string) => {
@@ -215,12 +216,18 @@ export default function HomePage() {
                 {filteredCardTemplates.map((template: any) => (
                   <Link key={template.id} href={`/cards/${template.category?.slug || "other"}/${template.id}`} className="block">
                     <Card className="overflow-hidden group hover:shadow-md transition-shadow cursor-pointer">
-                      <div className="aspect-[3/4] w-full overflow-hidden bg-muted">
+                      <div className="aspect-square w-full overflow-hidden bg-muted">
                         {template.imageUrl ? (
                           <img
                             src={template.imageUrl}
                             alt={template.title}
-                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                            className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-300"
+                            loading="lazy"
+                            onError={(e) => {
+                              console.error("Error loading template image:", template.id);
+                              e.currentTarget.onerror = null;
+                              e.currentTarget.src = "/static/placeholder-card.svg";
+                            }}
                           />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center text-muted-foreground">
@@ -258,12 +265,18 @@ export default function HomePage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
                 {filteredCertificateTemplates.map((template: any) => (
                   <Card key={template.id} className="overflow-hidden group">
-                    <div className="aspect-[4/3] w-full overflow-hidden bg-muted">
+                    <div className="aspect-square w-full overflow-hidden bg-muted">
                       {template.imageUrl ? (
                         <img
                           src={template.imageUrl}
                           alt={template.title}
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                          className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-300"
+                          loading="lazy"
+                          onError={(e) => {
+                            console.error("Error loading certificate template image:", template.id);
+                            e.currentTarget.onerror = null;
+                            e.currentTarget.src = "/static/placeholder-certificate.svg";
+                          }}
                         />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center text-muted-foreground">

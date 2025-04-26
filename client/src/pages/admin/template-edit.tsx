@@ -58,7 +58,13 @@ export default function TemplateEditPage() {
       fontFamily: 'Tajawal',
       fontSize: 16,
       textColor: '#000000',
-      backgroundColor: '#ffffff'
+      backgroundColor: '#ffffff',
+      orientation: 'portrait',
+      quality: 'high',
+      compressionLevel: 0,
+      format: 'png',
+      resolution: 300,
+      aspectRatio: '3:4'
     },
     active: true
   });
@@ -105,7 +111,13 @@ export default function TemplateEditPage() {
             fontFamily: 'Tajawal',
             fontSize: 16,
             textColor: '#000000',
-            backgroundColor: '#ffffff'
+            backgroundColor: '#ffffff',
+            orientation: 'portrait',
+            quality: 'high',
+            compressionLevel: 0,
+            format: 'png',
+            resolution: 300,
+            aspectRatio: '3:4'
           },
           active: Boolean(templateData.active),
           templateFields: templateFields
@@ -437,102 +449,263 @@ export default function TemplateEditPage() {
                 </div>
                 
                 <div className="border-t pt-4">
-                  <h3 className="font-medium mb-2">إعدادات العرض</h3>
-                  <div className="space-y-3">
-                    <div className="grid gap-2">
-                      <Label htmlFor="fontSize">حجم الخط</Label>
-                      <Input
-                        id="fontSize"
-                        name="fontSize"
-                        type="number"
-                        value={formData.settings?.fontSize || 16}
-                        onChange={handleSettingsChange}
-                        min="8"
-                        max="72"
-                      />
-                    </div>
+                  <Tabs defaultValue="text">
+                    <TabsList className="w-full mb-4">
+                      <TabsTrigger value="text">إعدادات النص</TabsTrigger>
+                      <TabsTrigger value="image">إعدادات الصورة</TabsTrigger>
+                    </TabsList>
                     
-                    <div className="grid gap-2">
-                      <Label htmlFor="fontFamily">نوع الخط</Label>
-                      <Select 
-                        value={formData.settings?.fontFamily || 'Tajawal'} 
-                        onValueChange={(value) => {
-                          setFormData(prev => ({
-                            ...prev,
-                            settings: {
-                              ...prev.settings,
-                              fontFamily: value
-                            }
-                          }));
-                        }}
-                      >
-                        <SelectTrigger id="fontFamily">
-                          <SelectValue placeholder="اختر نوع الخط" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="Tajawal">طجوال</SelectItem>
-                          <SelectItem value="Cairo">كايرو</SelectItem>
-                          <SelectItem value="Almarai">المراعي</SelectItem>
-                          <SelectItem value="Amiri">أميري</SelectItem>
-                          <SelectItem value="Arial">Arial</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    
-                    <div className="grid gap-2">
-                      <Label htmlFor="textColor">لون الخط</Label>
-                      <div className="flex gap-2">
+                    <TabsContent value="text" className="space-y-4">
+                      <div className="grid gap-2">
+                        <Label htmlFor="fontSize">حجم الخط</Label>
                         <Input
-                          id="textColor"
-                          name="textColor"
-                          type="color"
-                          value={formData.settings?.textColor || '#000000'}
+                          id="fontSize"
+                          name="fontSize"
+                          type="number"
+                          value={formData.settings?.fontSize || 16}
                           onChange={handleSettingsChange}
-                          className="w-12 h-9 p-1"
+                          min="8"
+                          max="72"
                         />
-                        <Input 
-                          value={formData.settings?.textColor || '#000000'}
-                          onChange={(e) => {
+                      </div>
+                      
+                      <div className="grid gap-2">
+                        <Label htmlFor="fontFamily">نوع الخط</Label>
+                        <Select 
+                          value={formData.settings?.fontFamily || 'Tajawal'} 
+                          onValueChange={(value) => {
                             setFormData(prev => ({
                               ...prev,
                               settings: {
                                 ...prev.settings,
-                                textColor: e.target.value
+                                fontFamily: value
                               }
                             }));
                           }}
-                          className="flex-1"
-                        />
+                        >
+                          <SelectTrigger id="fontFamily">
+                            <SelectValue placeholder="اختر نوع الخط" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="Tajawal">طجوال</SelectItem>
+                            <SelectItem value="Cairo">كايرو</SelectItem>
+                            <SelectItem value="Almarai">المراعي</SelectItem>
+                            <SelectItem value="Amiri">أميري</SelectItem>
+                            <SelectItem value="Arial">Arial</SelectItem>
+                          </SelectContent>
+                        </Select>
                       </div>
-                    </div>
+                      
+                      <div className="grid gap-2">
+                        <Label htmlFor="textColor">لون الخط</Label>
+                        <div className="flex gap-2">
+                          <Input
+                            id="textColor"
+                            name="textColor"
+                            type="color"
+                            value={formData.settings?.textColor || '#000000'}
+                            onChange={handleSettingsChange}
+                            className="w-12 h-9 p-1"
+                          />
+                          <Input 
+                            value={formData.settings?.textColor || '#000000'}
+                            onChange={(e) => {
+                              setFormData(prev => ({
+                                ...prev,
+                                settings: {
+                                  ...prev.settings,
+                                  textColor: e.target.value
+                                }
+                              }));
+                            }}
+                            className="flex-1"
+                          />
+                        </div>
+                      </div>
+                      
+                      <div className="grid gap-2">
+                        <Label htmlFor="backgroundColor">لون الخلفية</Label>
+                        <div className="flex gap-2">
+                          <Input
+                            id="backgroundColor"
+                            name="backgroundColor"
+                            type="color"
+                            value={formData.settings?.backgroundColor || '#ffffff'}
+                            onChange={handleSettingsChange}
+                            className="w-12 h-9 p-1"
+                          />
+                          <Input 
+                            value={formData.settings?.backgroundColor || '#ffffff'}
+                            onChange={(e) => {
+                              setFormData(prev => ({
+                                ...prev,
+                                settings: {
+                                  ...prev.settings,
+                                  backgroundColor: e.target.value
+                                }
+                              }));
+                            }}
+                            className="flex-1"
+                          />
+                        </div>
+                      </div>
+                    </TabsContent>
                     
-                    <div className="grid gap-2">
-                      <Label htmlFor="backgroundColor">لون الخلفية</Label>
-                      <div className="flex gap-2">
-                        <Input
-                          id="backgroundColor"
-                          name="backgroundColor"
-                          type="color"
-                          value={formData.settings?.backgroundColor || '#ffffff'}
-                          onChange={handleSettingsChange}
-                          className="w-12 h-9 p-1"
-                        />
-                        <Input 
-                          value={formData.settings?.backgroundColor || '#ffffff'}
-                          onChange={(e) => {
+                    <TabsContent value="image" className="space-y-4">
+                      <div className="grid gap-2">
+                        <Label htmlFor="orientation">اتجاه الصورة</Label>
+                        <Select 
+                          value={formData.settings?.orientation || 'portrait'} 
+                          onValueChange={(value) => {
                             setFormData(prev => ({
                               ...prev,
                               settings: {
                                 ...prev.settings,
-                                backgroundColor: e.target.value
+                                orientation: value
                               }
                             }));
                           }}
-                          className="flex-1"
-                        />
+                        >
+                          <SelectTrigger id="orientation">
+                            <SelectValue placeholder="اختر اتجاه الصورة" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="portrait">طولي (Portrait)</SelectItem>
+                            <SelectItem value="landscape">عرضي (Landscape)</SelectItem>
+                            <SelectItem value="square">مربع (Square)</SelectItem>
+                          </SelectContent>
+                        </Select>
                       </div>
-                    </div>
-                  </div>
+                      
+                      <div className="grid gap-2">
+                        <Label htmlFor="aspectRatio">نسبة العرض إلى الارتفاع</Label>
+                        <Select 
+                          value={formData.settings?.aspectRatio || '3:4'} 
+                          onValueChange={(value) => {
+                            setFormData(prev => ({
+                              ...prev,
+                              settings: {
+                                ...prev.settings,
+                                aspectRatio: value
+                              }
+                            }));
+                          }}
+                        >
+                          <SelectTrigger id="aspectRatio">
+                            <SelectValue placeholder="اختر نسبة العرض إلى الارتفاع" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="3:4">3:4 (بطاقة قياسية)</SelectItem>
+                            <SelectItem value="1:1">1:1 (مربع - انستجرام)</SelectItem>
+                            <SelectItem value="9:16">9:16 (قصص انستجرام)</SelectItem>
+                            <SelectItem value="4:3">4:3 (شاشة عريضة)</SelectItem>
+                            <SelectItem value="16:9">16:9 (فيديو HD)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      
+                      <div className="grid gap-2">
+                        <Label htmlFor="quality">جودة الصورة</Label>
+                        <Select 
+                          value={formData.settings?.quality || 'high'} 
+                          onValueChange={(value) => {
+                            setFormData(prev => ({
+                              ...prev,
+                              settings: {
+                                ...prev.settings,
+                                quality: value
+                              }
+                            }));
+                          }}
+                        >
+                          <SelectTrigger id="quality">
+                            <SelectValue placeholder="اختر جودة الصورة" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="high">عالية</SelectItem>
+                            <SelectItem value="medium">متوسطة</SelectItem>
+                            <SelectItem value="low">منخفضة</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      
+                      <div className="grid gap-2">
+                        <Label htmlFor="format">صيغة الصورة</Label>
+                        <Select 
+                          value={formData.settings?.format || 'png'} 
+                          onValueChange={(value) => {
+                            setFormData(prev => ({
+                              ...prev,
+                              settings: {
+                                ...prev.settings,
+                                format: value
+                              }
+                            }));
+                          }}
+                        >
+                          <SelectTrigger id="format">
+                            <SelectValue placeholder="اختر صيغة الصورة" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="png">PNG (جودة عالية للشفافية)</SelectItem>
+                            <SelectItem value="jpeg">JPEG (حجم أصغر)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      
+                      <div className="grid gap-2">
+                        <Label htmlFor="resolution">دقة الصورة (DPI)</Label>
+                        <Select 
+                          value={formData.settings?.resolution?.toString() || '300'} 
+                          onValueChange={(value) => {
+                            setFormData(prev => ({
+                              ...prev,
+                              settings: {
+                                ...prev.settings,
+                                resolution: parseInt(value)
+                              }
+                            }));
+                          }}
+                        >
+                          <SelectTrigger id="resolution">
+                            <SelectValue placeholder="اختر دقة الصورة" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="72">72 DPI (للشاشة)</SelectItem>
+                            <SelectItem value="150">150 DPI (للويب)</SelectItem>
+                            <SelectItem value="300">300 DPI (للطباعة)</SelectItem>
+                            <SelectItem value="600">600 DPI (للطباعة عالية الجودة)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      
+                      <div className="grid gap-2">
+                        <Label htmlFor="compressionLevel">مستوى الضغط</Label>
+                        <Select 
+                          value={formData.settings?.compressionLevel?.toString() || '0'} 
+                          onValueChange={(value) => {
+                            setFormData(prev => ({
+                              ...prev,
+                              settings: {
+                                ...prev.settings,
+                                compressionLevel: parseInt(value)
+                              }
+                            }));
+                          }}
+                        >
+                          <SelectTrigger id="compressionLevel">
+                            <SelectValue placeholder="اختر مستوى الضغط" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="0">بدون ضغط (جودة أعلى)</SelectItem>
+                            <SelectItem value="3">ضغط منخفض</SelectItem>
+                            <SelectItem value="6">ضغط متوسط</SelectItem>
+                            <SelectItem value="9">ضغط عالي (حجم أصغر)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </TabsContent>
+                  </Tabs>
                 </div>
               </CardContent>
             </Card>

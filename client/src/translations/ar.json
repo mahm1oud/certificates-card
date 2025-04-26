@@ -172,8 +172,17 @@
     "title": "مشاركة",
     "link": "رابط المشاركة",
     "copyLink": "نسخ الرابط",
+    "copied": "تم النسخ!",
     "download": "تنزيل",
     "qrCode": "رمز QR",
+    "preview": "معاينة",
+    "description": "اختر منصة وشارك بطاقتك على وسائل التواصل الاجتماعي",
+    "share": "مشاركة",
+    "facebook": "فيسبوك",
+    "twitter": "تويتر",
+    "whatsapp": "واتساب",
+    "instagram": "انستغرام",
+    "twitterText": "تحقق من هذه البطاقة التي أنشأتها!",
     "social": {
       "whatsapp": "واتساب",
       "facebook": "فيسبوك",
@@ -182,6 +191,18 @@
       "email": "البريد الإلكتروني"
     },
     "success": "تم نسخ الرابط بنجاح"
+  },
+  "socialMediaFormats": {
+    "title": "تنسيقات وسائل التواصل الاجتماعي",
+    "selectFormat": "اختر التنسيق",
+    "instagram": "انستغرام",
+    "instagramStory": "قصة انستغرام",
+    "facebook": "فيسبوك",
+    "twitter": "تويتر",
+    "whatsapp": "واتساب",
+    "pinterest": "بينترست",
+    "dimensions": "الأبعاد",
+    "ratio": "النسبة"
   },
   "common": {
     "loading": "جاري التحميل...",

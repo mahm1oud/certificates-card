@@ -8,13 +8,31 @@ async function throwIfResNotOk(res: Response) {
 }
 
 export async function apiRequest(
-  method: string,
-  url: string,
-  data?: unknown | undefined,
+  urlOrOptions: string | { url: string; method?: string; body?: any },
   options?: {
+    method?: string;
+    body?: any;
     on401?: UnauthorizedBehavior;
   }
 ): Promise<Response> {
+  let url: string;
+  let method: string = 'GET';
+  let data: any = undefined;
+  let on401: UnauthorizedBehavior | undefined = undefined;
+
+  // Handle different call patterns
+  if (typeof urlOrOptions === 'string') {
+    url = urlOrOptions;
+    method = options?.method || 'GET';
+    data = options?.body;
+    on401 = options?.on401;
+  } else {
+    url = urlOrOptions.url;
+    method = urlOrOptions.method || 'GET';
+    data = urlOrOptions.body;
+    on401 = options?.on401;
+  }
+
   const res = await fetch(url, {
     method,
     headers: data ? { "Content-Type": "application/json" } : {},
@@ -22,10 +40,10 @@ export async function apiRequest(
     credentials: "include",
   });
 
-  if (res.status === 401 && options?.on401) {
-    if (options.on401 === "returnNull") {
+  if (res.status === 401 && on401) {
+    if (on401 === "returnNull") {
       return res;
-    } else if (options.on401 === "redirect-to-login") {
+    } else if (on401 === "redirect-to-login") {
       window.location.href = "/auth";
       return res;
     }

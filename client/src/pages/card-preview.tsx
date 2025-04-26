@@ -4,8 +4,9 @@ import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import ShareOptions from "@/components/share-options";
 import { downloadImage } from "@/lib/utils";
-import { Loader2, Eye, Download, Share2, X } from "lucide-react";
+import { Loader2, Eye, Download, X } from "lucide-react";
 import { getQueryFn } from "@/lib/queryClient";
+import { useTranslation } from "@/lib/i18n";
 
 // تعريف نوع البطاقة
 interface Card {
@@ -163,11 +164,13 @@ const CardPreview = () => {
         
         <div className="p-6">
           <div className="bg-gray-100 rounded-lg p-4 flex justify-center">
-            <div className="relative w-full max-w-md">
+            <div className="relative w-full max-w-md overflow-hidden">
               <img 
                 src={card.imageUrl} 
                 alt={card.template?.title || "البطاقة المخصصة"} 
-                className="w-full h-auto rounded-md shadow-md"
+                className="w-full h-auto object-contain rounded-md shadow-md max-h-[80vh]"
+                style={{ aspectRatio: '3/4' }}
+                loading="lazy"
               />
             </div>
           </div>
@@ -191,19 +194,11 @@ const CardPreview = () => {
               تحميل البطاقة
             </Button>
             
-            <Button
-              variant="outline"
-              onClick={toggleShareOptions}
-              className="flex items-center gap-2"
-            >
-              <Share2 className="h-4 w-4" />
-              مشاركة البطاقة
-            </Button>
+            <ShareOptions 
+              cardId={card.id || card.publicId} 
+              imageUrl={card.imageUrl} 
+            />
           </div>
-          
-          {isShareOptionsVisible && cardId && (
-            <ShareOptions cardId={cardId} />
-          )}
         </div>
       </div>
     </div>

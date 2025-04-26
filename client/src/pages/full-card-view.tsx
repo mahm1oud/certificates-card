@@ -324,11 +324,17 @@ export default function FullCardView() {
 
         <TabsContent value="preview" className="m-0">
           <div className="flex justify-center">
-            <div className="max-w-xl w-full overflow-hidden rounded-lg shadow-lg">
+            <div className="max-w-xl w-full overflow-hidden rounded-lg shadow-lg bg-gray-50">
               <img 
                 src={card.imageUrl} 
                 alt={card.template?.title || "بطاقة"} 
-                className="w-full h-auto object-contain"
+                className="w-full h-auto object-contain mx-auto max-h-[85vh]"
+                style={{ aspectRatio: '3/4' }}
+                loading="lazy"
+                onError={(e) => {
+                  console.error("Error loading image:", e);
+                  e.currentTarget.src = "/placeholder-card.png";
+                }}
               />
             </div>
           </div>

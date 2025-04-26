@@ -1,10 +1,24 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import arTranslations from '../translations/ar.json';
 import enTranslations from '../translations/en.json';
+import frTranslations from '../translations/fr.json';
 
 // أنواع البيانات
-type LocaleType = 'ar' | 'en';
+type LocaleType = 'ar' | 'en' | 'fr';
 type TranslationsType = typeof arTranslations;
+
+// تكوين اللغات المدعومة
+export const SUPPORTED_LANGUAGES = [
+  { code: 'ar', name: 'العربية', dir: 'rtl' },
+  { code: 'en', name: 'English', dir: 'ltr' },
+  { code: 'fr', name: 'Français', dir: 'ltr' }
+];
+
+// الحصول على اتجاه اللغة
+export const getLanguageDirection = (locale: LocaleType): 'rtl' | 'ltr' => {
+  const lang = SUPPORTED_LANGUAGES.find(l => l.code === locale);
+  return (lang?.dir as 'rtl' | 'ltr') || 'ltr';
+};
 
 interface I18nContextType {
   locale: LocaleType;
@@ -13,6 +27,7 @@ interface I18nContextType {
   t: (key: string, variables?: Record<string, string | number>) => string;
   dir: () => 'rtl' | 'ltr';
   langName: () => string;
+  supportedLanguages: typeof SUPPORTED_LANGUAGES;
 }
 
 // إنشاء السياق
@@ -26,16 +41,29 @@ export const I18nProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   // تحديث الترجمات عند تغيير اللغة
   useEffect(() => {
-    const loadTranslations = async () => {
-      if (locale === 'ar') {
-        setTranslations(arTranslations);
-        document.documentElement.dir = 'rtl';
-        document.documentElement.lang = 'ar';
-      } else if (locale === 'en') {
-        setTranslations(enTranslations);
-        document.documentElement.dir = 'ltr';
-        document.documentElement.lang = 'en';
+    const loadTranslations = () => {
+      let newTranslations;
+      const direction = getLanguageDirection(locale);
+      
+      // تحديد ملف الترجمة المناسب
+      switch (locale) {
+        case 'ar':
+          newTranslations = arTranslations;
+          break;
+        case 'en':
+          newTranslations = enTranslations;
+          break;
+        case 'fr':
+          newTranslations = frTranslations;
+          break;
+        default:
+          newTranslations = arTranslations;
       }
+      
+      // تطبيق الترجمات واتجاه النص
+      setTranslations(newTranslations);
+      document.documentElement.dir = direction;
+      document.documentElement.lang = locale;
     };
     
     loadTranslations();
@@ -47,7 +75,7 @@ export const I18nProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   // استرجاع اللغة المفضلة من التخزين المحلي عند التحميل
   useEffect(() => {
     const savedLocale = localStorage.getItem('locale') as LocaleType | null;
-    if (savedLocale && (savedLocale === 'ar' || savedLocale === 'en')) {
+    if (savedLocale && SUPPORTED_LANGUAGES.some(lang => lang.code === savedLocale)) {
       setLocale(savedLocale);
     }
   }, []);
@@ -87,12 +115,21 @@ export const I18nProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   // دالة للحصول على اسم اللغة الحالية
   const langName = (): string => {
-    return locale === 'ar' ? 'العربية' : 'English';
+    const lang = SUPPORTED_LANGUAGES.find(l => l.code === locale);
+    return lang?.name || 'العربية';
   };
 
   // توفير السياق للتطبيق
   return (
-    <I18nContext.Provider value={{ locale, translations, setLocale, t, dir, langName }}>
+    <I18nContext.Provider value={{ 
+      locale, 
+      translations, 
+      setLocale, 
+      t, 
+      dir, 
+      langName,
+      supportedLanguages: SUPPORTED_LANGUAGES 
+    }}>
       {children}
     </I18nContext.Provider>
   );
@@ -109,10 +146,13 @@ export const useTranslation = (): I18nContextType => {
 
 // مكون لتبديل اللغة
 export const LanguageSwitcher: React.FC = () => {
-  const { locale, setLocale, langName } = useTranslation();
+  const { locale, setLocale, supportedLanguages, langName } = useTranslation();
   
+  // تحديد اللغة التالية في القائمة بالتناوب
   const toggleLanguage = () => {
-    setLocale(locale === 'ar' ? 'en' : 'ar');
+    const currentLangIndex = supportedLanguages.findIndex(lang => lang.code === locale);
+    const nextLangIndex = (currentLangIndex + 1) % supportedLanguages.length;
+    setLocale(supportedLanguages[nextLangIndex].code as LocaleType);
   };
   
   return (
@@ -122,5 +162,26 @@ export const LanguageSwitcher: React.FC = () => {
     >
       {langName()}
     </button>
+  );
+};
+
+// واجهة منسدلة كاملة لاختيار اللغة
+export const LanguageSelector: React.FC = () => {
+  const { locale, setLocale, supportedLanguages } = useTranslation();
+  
+  return (
+    <div className="relative inline-block text-left">
+      <select
+        value={locale}
+        onChange={(e) => setLocale(e.target.value as LocaleType)}
+        className="block w-full rounded-md border border-gray-300 px-3 py-2 bg-white text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-primary"
+      >
+        {supportedLanguages.map(lang => (
+          <option key={lang.code} value={lang.code}>
+            {lang.name}
+          </option>
+        ))}
+      </select>
+    </div>
   );
 };

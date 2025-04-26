@@ -8,61 +8,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DialogFooter } from "@/components/ui/dialog";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { Plus, Minus, Trash2, ChevronUp, ChevronDown, Loader2 } from "lucide-react";
-
-type TextShadow = {
-  enabled: boolean;
-  color: string;
-  blur: number;
-};
-
-type TemplateField = {
-  id: number;
-  templateId: number;
-  name: string;
-  label: string;
-  labelAr?: string;
-  type: string;
-  required: boolean;
-  defaultValue?: string;
-  placeholder?: string;
-  placeholderAr?: string;
-  options?: string[];
-  position?: {
-    x: number;
-    y: number;
-    snapToGrid?: boolean;
-  };
-  style?: {
-    fontFamily?: string;
-    fontSize?: number;
-    fontWeight?: string;
-    color?: string;
-    align?: string;
-    verticalPosition?: string;
-    textShadow?: TextShadow;
-  };
-  displayOrder: number;
-};
-
-type Template = {
-  id?: number;
-  title: string;
-  titleAr?: string;
-  slug: string;
-  categoryId: number;
-  imageUrl: string;
-  thumbnailUrl?: string;
-  fields: string[];
-  defaultValues?: any;
-  settings?: any;
-  active: boolean;
-  templateFields?: TemplateField[];
-};
 
 export default function TemplateFieldsPage() {
   const { templateId } = useParams();
@@ -71,14 +21,14 @@ export default function TemplateFieldsPage() {
   const queryClient = useQueryClient();
   
   // State for template data
-  const [template, setTemplate] = useState<Template | null>(null);
-  const [fields, setFields] = useState<TemplateField[]>([]);
+  const [template, setTemplate] = useState(null);
+  const [fields, setFields] = useState([]);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [editingField, setEditingField] = useState<number | null>(null);
+  const [editingField, setEditingField] = useState(null);
   const [newOption, setNewOption] = useState("");
   
   // State for field form data
-  const [fieldFormData, setFieldFormData] = useState<Partial<TemplateField>>({
+  const [fieldFormData, setFieldFormData] = useState({
     name: "",
     label: "",
     labelAr: "",
@@ -111,32 +61,23 @@ export default function TemplateFieldsPage() {
   // Query to fetch template data
   const { data: templateData, isLoading: isTemplateLoading } = useQuery({
     queryKey: [`/api/templates/${templateId}`],
+    queryFn: apiRequest,
     enabled: !!templateId
   });
   
   // Query to fetch template fields
   const { data: fieldsData, isLoading: isFieldsLoading, refetch: refetchFields } = useQuery({
     queryKey: [`/api/templates/${templateId}/fields`],
+    queryFn: apiRequest,
     enabled: !!templateId
   });
   
-  // Handle fields data updates
-  useEffect(() => {
-    if (fieldsData) {
-      console.log("Fields data received:", fieldsData);
-      if (Array.isArray(fieldsData)) {
-        setFields(fieldsData);
-      }
-    }
-  }, [fieldsData]);
-  
   // Mutation for creating a new field
   const createFieldMutation = useMutation({
-    mutationFn: (data: any) => {
-      return apiRequest({
-        url: `/api/templates/${templateId}/fields`,
+    mutationFn: (data) => {
+      return apiRequest(`/api/templates/${templateId}/fields`, {
         method: "POST",
-        body: data
+        body: JSON.stringify(data)
       });
     },
     onSuccess: () => {
@@ -147,7 +88,7 @@ export default function TemplateFieldsPage() {
       refetchFields();
       resetFieldForm();
     },
-    onError: (error: any) => {
+    onError: (error) => {
       toast({
         title: "حدث خطأ",
         description: error.message || "حدث خطأ أثناء إضافة الحقل",
@@ -158,11 +99,10 @@ export default function TemplateFieldsPage() {
   
   // Mutation for updating a field
   const updateFieldMutation = useMutation({
-    mutationFn: (data: any) => {
-      return apiRequest({
-        url: `/api/templates/${templateId}/fields/${editingField}`,
+    mutationFn: (data) => {
+      return apiRequest(`/api/templates/${templateId}/fields/${editingField}`, {
         method: "PUT",
-        body: data
+        body: JSON.stringify(data)
       });
     },
     onSuccess: () => {
@@ -173,7 +113,7 @@ export default function TemplateFieldsPage() {
       refetchFields();
       resetFieldForm();
     },
-    onError: (error: any) => {
+    onError: (error) => {
       toast({
         title: "حدث خطأ",
         description: error.message || "حدث خطأ أثناء تحديث الحقل",
@@ -184,9 +124,8 @@ export default function TemplateFieldsPage() {
   
   // Mutation for deleting a field
   const deleteFieldMutation = useMutation({
-    mutationFn: (fieldId: number) => {
-      return apiRequest({
-        url: `/api/templates/${templateId}/fields/${fieldId}`,
+    mutationFn: (fieldId) => {
+      return apiRequest(`/api/templates/${templateId}/fields/${fieldId}`, {
         method: "DELETE"
       });
     },
@@ -196,7 +135,7 @@ export default function TemplateFieldsPage() {
       });
       refetchFields();
     },
-    onError: (error: any) => {
+    onError: (error) => {
       toast({
         title: "حدث خطأ",
         description: error.message || "حدث خطأ أثناء حذف الحقل",
@@ -208,16 +147,18 @@ export default function TemplateFieldsPage() {
   // Update template and fields when data changes
   useEffect(() => {
     if (templateData) {
-      const data = typeof templateData === 'object' && 'json' in templateData 
-        ? (templateData as Response).json().then(data => setTemplate(data as Template))
-        : setTemplate(templateData as unknown as Template);
+      setTemplate(templateData);
     }
   }, [templateData]);
   
-  // يتم التعامل مع fieldsData في useEffect السابق
+  useEffect(() => {
+    if (fieldsData) {
+      setFields(fieldsData);
+    }
+  }, [fieldsData]);
   
   // Handle opening the edit dialog
-  const handleEditField = (field: TemplateField) => {
+  const handleEditField = (field) => {
     setEditingField(field.id);
     setFieldFormData({
       name: field.name || "",
@@ -234,17 +175,16 @@ export default function TemplateFieldsPage() {
         y: 50,
         snapToGrid: false
       },
-      style: {
-        fontFamily: field.style?.fontFamily || "Cairo",
-        fontSize: field.style?.fontSize || 24,
-        fontWeight: field.style?.fontWeight || "normal",
-        color: field.style?.color || "#000000",
-        align: field.style?.align || "center",
-        verticalPosition: field.style?.verticalPosition || "middle",
+      style: field.style || {
+        fontFamily: "Cairo",
+        fontSize: 24,
+        fontWeight: "normal",
+        color: "#000000",
+        align: "center",
         textShadow: {
-          enabled: field.style?.textShadow?.enabled || false,
-          color: field.style?.textShadow?.color || "#ffffff",
-          blur: field.style?.textShadow?.blur || 5
+          enabled: false,
+          color: "#ffffff",
+          blur: 5
         }
       },
       displayOrder: field.displayOrder || 0
@@ -282,7 +222,6 @@ export default function TemplateFieldsPage() {
         fontWeight: "normal",
         color: "#000000",
         align: "center",
-        verticalPosition: "middle",
         textShadow: {
           enabled: false,
           color: "#ffffff",
@@ -295,7 +234,7 @@ export default function TemplateFieldsPage() {
   };
   
   // Handle submit
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = (e) => {
     e.preventDefault();
     
     // Validation
@@ -325,14 +264,14 @@ export default function TemplateFieldsPage() {
   };
   
   // Handle delete
-  const handleDeleteField = (fieldId: number) => {
+  const handleDeleteField = (fieldId) => {
     if (confirm("هل أنت متأكد من حذف هذا الحقل؟")) {
       deleteFieldMutation.mutate(fieldId);
     }
   };
   
   // Handle position change
-  const handlePositionChange = (axis: string, value: number) => {
+  const handlePositionChange = (axis, value) => {
     setFieldFormData((prev) => ({
       ...prev,
       position: {
@@ -343,7 +282,7 @@ export default function TemplateFieldsPage() {
   };
   
   // Handle style change
-  const handleStyleChange = (prop: string, value: any) => {
+  const handleStyleChange = (prop, value) => {
     setFieldFormData((prev) => ({
       ...prev,
       style: {
@@ -365,10 +304,10 @@ export default function TemplateFieldsPage() {
   };
   
   // Handle remove option
-  const handleRemoveOption = (index: number) => {
+  const handleRemoveOption = (index) => {
     setFieldFormData((prev) => ({
       ...prev,
-      options: prev.options?.filter((_, i) => i !== index)
+      options: prev.options.filter((_, i) => i !== index)
     }));
   };
   
@@ -399,18 +338,6 @@ export default function TemplateFieldsPage() {
         <div className="flex gap-2">
           <Button variant="outline" onClick={() => setLocation(`/admin/templates`)}>
             العودة للقوالب
-          </Button>
-          <Button variant="outline" onClick={(e) => {
-            e.preventDefault(); // منع الانتقال الافتراضي
-            if (confirm("هل تريد نسخ حقول هذا القالب إلى قالب آخر؟")) {
-              // هنا يمكن إضافة منطق نسخ الحقول
-              toast({
-                title: "جاري تطوير الميزة",
-                description: "سيتم إضافة هذه الميزة قريبًا"
-              });
-            }
-          }}>
-            نسخ الحقول
           </Button>
           <Button onClick={handleAddField}>إضافة حقل جديد</Button>
         </div>
@@ -480,7 +407,7 @@ export default function TemplateFieldsPage() {
                       fontFamily: field.style?.fontFamily || 'Cairo',
                       fontSize: `${field.style?.fontSize || 16}px`,
                       fontWeight: field.style?.fontWeight || 'normal',
-                      textAlign: (field.style?.align as any) || 'center',
+                      textAlign: field.style?.align || 'center',
                       minWidth: '100px',
                       minHeight: '30px',
                       zIndex: 10
@@ -570,6 +497,7 @@ export default function TemplateFieldsPage() {
                     <Select 
                       value={fieldFormData.type || 'text'}
                       onValueChange={(value) => setFieldFormData({ ...fieldFormData, type: value })}
+                      required
                     >
                       <SelectTrigger id="type">
                         <SelectValue placeholder="اختر نوع الحقل" />
@@ -639,25 +567,25 @@ export default function TemplateFieldsPage() {
                           <div className="grid grid-cols-3 gap-2">
                             <Button
                               type="button"
-                              variant={fieldFormData.style?.verticalPosition === 'top' ? 'default' : 'outline'}
+                              variant={fieldFormData.style?.verticalAlign === 'top' ? 'default' : 'outline'}
                               className="w-full"
-                              onClick={() => handleStyleChange('verticalPosition', 'top')}
+                              onClick={() => handleStyleChange('verticalAlign', 'top')}
                             >
                               أعلى
                             </Button>
                             <Button
                               type="button" 
-                              variant={fieldFormData.style?.verticalPosition === 'middle' ? 'default' : 'outline'}
+                              variant={fieldFormData.style?.verticalAlign === 'middle' ? 'default' : 'outline'}
                               className="w-full"
-                              onClick={() => handleStyleChange('verticalPosition', 'middle')}
+                              onClick={() => handleStyleChange('verticalAlign', 'middle')}
                             >
                               وسط
                             </Button>
                             <Button
                               type="button"
-                              variant={fieldFormData.style?.verticalPosition === 'bottom' ? 'default' : 'outline'}
+                              variant={fieldFormData.style?.verticalAlign === 'bottom' ? 'default' : 'outline'}
                               className="w-full"
-                              onClick={() => handleStyleChange('verticalPosition', 'bottom')}
+                              onClick={() => handleStyleChange('verticalAlign', 'bottom')}
                             >
                               أسفل
                             </Button>
@@ -671,25 +599,25 @@ export default function TemplateFieldsPage() {
                           <div className="grid grid-cols-3 gap-2">
                             <Button
                               type="button"
-                              variant={fieldFormData.style?.align === 'right' ? 'default' : 'outline'}
+                              variant={fieldFormData.style?.textAlign === 'right' ? 'default' : 'outline'}
                               className="w-full"
-                              onClick={() => handleStyleChange('align', 'right')}
+                              onClick={() => handleStyleChange('textAlign', 'right')}
                             >
                               يمين
                             </Button>
                             <Button
                               type="button"
-                              variant={fieldFormData.style?.align === 'center' ? 'default' : 'outline'}
+                              variant={fieldFormData.style?.textAlign === 'center' ? 'default' : 'outline'}
                               className="w-full"
-                              onClick={() => handleStyleChange('align', 'center')}
+                              onClick={() => handleStyleChange('textAlign', 'center')}
                             >
                               وسط
                             </Button>
                             <Button
                               type="button"
-                              variant={fieldFormData.style?.align === 'left' ? 'default' : 'outline'}
+                              variant={fieldFormData.style?.textAlign === 'left' ? 'default' : 'outline'}
                               className="w-full"
-                              onClick={() => handleStyleChange('align', 'left')}
+                              onClick={() => handleStyleChange('textAlign', 'left')}
                             >
                               يسار
                             </Button>
@@ -840,73 +768,6 @@ export default function TemplateFieldsPage() {
                         </span>
                       </div>
                     </div>
-                    
-                    {/* إضافة معاينة القالب داخل تبويب الموضع - حجم مصغر */}
-                    <div className="mt-6 border rounded p-4 bg-gray-50">
-                      <h3 className="text-lg font-medium mb-3">معاينة الموضع</h3>
-                      <div className="relative max-h-[300px] aspect-[3/4] mx-auto bg-gray-100 border" style={{width: '220px'}}>
-                        {template.imageUrl ? (
-                          <div className="relative w-full h-full">
-                            <img 
-                              src={template.imageUrl} 
-                              alt={template.title}
-                              className="object-contain w-full h-full"
-                            />
-                            
-                            {/* معاينة موضع الحقل الحالي */}
-                            <div
-                              className="absolute border-2 border-dashed border-primary rounded p-2 bg-primary/20"
-                              style={{
-                                top: `${fieldFormData.position?.y || 50}%`,
-                                left: `${fieldFormData.position?.x || 50}%`,
-                                transform: 'translate(-50%, -50%)',
-                                color: fieldFormData.style?.color || 'black',
-                                fontFamily: fieldFormData.style?.fontFamily || 'Cairo',
-                                fontSize: `${fieldFormData.style?.fontSize || 16}px`,
-                                fontWeight: fieldFormData.style?.fontWeight || 'normal',
-                                textAlign: (fieldFormData.style?.align as any) || 'center',
-                                minWidth: '100px',
-                                minHeight: '30px',
-                                zIndex: 10
-                              }}
-                            >
-                              {fieldFormData.label || 'مثال'}
-                            </div>
-                            
-                            {/* حقول أخرى في القالب */}
-                            {fields.filter(f => f.id !== fieldFormData.id).map((field) => (
-                              <div
-                                key={field.id}
-                                className="absolute border-2 border-dashed border-blue-500/50 rounded p-2 bg-blue-500/10"
-                                style={{
-                                  top: `${field.position?.y || 50}%`,
-                                  left: `${field.position?.x || 50}%`,
-                                  transform: 'translate(-50%, -50%)',
-                                  color: field.style?.color || 'black',
-                                  fontFamily: field.style?.fontFamily || 'Cairo',
-                                  fontSize: `${field.style?.fontSize || 16}px`,
-                                  fontWeight: field.style?.fontWeight || 'normal',
-                                  textAlign: (field.style?.align as any) || 'center',
-                                  minWidth: '100px',
-                                  minHeight: '30px',
-                                  opacity: 0.6,
-                                  zIndex: 5
-                                }}
-                              >
-                                {field.label}
-                              </div>
-                            ))}
-                          </div>
-                        ) : (
-                          <div className="flex items-center justify-center h-full">
-                            <p className="text-muted-foreground">لا توجد صورة للقالب</p>
-                          </div>
-                        )}
-                      </div>
-                      <p className="text-xs text-muted-foreground mt-2">
-                        استخدم أزرار التحكم بالأعلى لتغيير موضع الحقل
-                      </p>
-                    </div>
                   </div>
                 </div>
               </TabsContent>
@@ -1055,9 +916,8 @@ export default function TemplateFieldsPage() {
                                 style: { 
                                   ...fieldFormData.style,
                                   textShadow: {
-                                    enabled: !!checked,
-                                    color: fieldFormData.style?.textShadow?.color || "#ffffff",
-                                    blur: fieldFormData.style?.textShadow?.blur || 5
+                                    ...fieldFormData.style?.textShadow,
+                                    enabled: !!checked
                                   }
                                 } 
                               })}
@@ -1080,9 +940,8 @@ export default function TemplateFieldsPage() {
                                       style: { 
                                         ...fieldFormData.style,
                                         textShadow: {
-                                          enabled: fieldFormData.style?.textShadow?.enabled || false,
-                                          color: e.target.value,
-                                          blur: fieldFormData.style?.textShadow?.blur || 5
+                                          ...fieldFormData.style?.textShadow,
+                                          color: e.target.value
                                         }
                                       } 
                                     })}
@@ -1095,9 +954,8 @@ export default function TemplateFieldsPage() {
                                       style: { 
                                         ...fieldFormData.style,
                                         textShadow: {
-                                          enabled: fieldFormData.style?.textShadow?.enabled || false,
-                                          color: e.target.value,
-                                          blur: fieldFormData.style?.textShadow?.blur || 5
+                                          ...fieldFormData.style?.textShadow,
+                                          color: e.target.value
                                         }
                                       } 
                                     })}
@@ -1118,8 +976,7 @@ export default function TemplateFieldsPage() {
                                     style: { 
                                       ...fieldFormData.style,
                                       textShadow: {
-                                        enabled: fieldFormData.style?.textShadow?.enabled || false,
-                                        color: fieldFormData.style?.textShadow?.color || "#ffffff",
+                                        ...fieldFormData.style?.textShadow,
                                         blur: Number(e.target.value)
                                       }
                                     } 
@@ -1161,7 +1018,7 @@ export default function TemplateFieldsPage() {
                               fontFamily: fieldFormData.style?.fontFamily || 'Cairo',
                               fontSize: `${fieldFormData.style?.fontSize || 16}px`,
                               fontWeight: fieldFormData.style?.fontWeight || 'normal',
-                              textAlign: (fieldFormData.style?.align as any) || 'center',
+                              textAlign: fieldFormData.style?.align || 'center',
                               textShadow: fieldFormData.style?.textShadow?.enabled ? 
                                 `0 0 ${fieldFormData.style?.textShadow?.blur || 5}px ${fieldFormData.style?.textShadow?.color || '#ffffff'}` : 
                                 'none',
@@ -1230,7 +1087,7 @@ export default function TemplateFieldsPage() {
                                   size="icon"
                                   onClick={() => {
                                     if (index > 0) {
-                                      const newOptions = [...fieldFormData.options!];
+                                      const newOptions = [...fieldFormData.options];
                                       [newOptions[index], newOptions[index - 1]] = [newOptions[index - 1], newOptions[index]];
                                       setFieldFormData({
                                         ...fieldFormData,
@@ -1248,8 +1105,8 @@ export default function TemplateFieldsPage() {
                                   variant="ghost"
                                   size="icon"
                                   onClick={() => {
-                                    if (index < fieldFormData.options!.length - 1) {
-                                      const newOptions = [...fieldFormData.options!];
+                                    if (index < fieldFormData.options.length - 1) {
+                                      const newOptions = [...fieldFormData.options];
                                       [newOptions[index], newOptions[index + 1]] = [newOptions[index + 1], newOptions[index]];
                                       setFieldFormData({
                                         ...fieldFormData,
@@ -1257,7 +1114,7 @@ export default function TemplateFieldsPage() {
                                       });
                                     }
                                   }}
-                                  disabled={index === fieldFormData.options!.length - 1}
+                                  disabled={index === fieldFormData.options.length - 1}
                                 >
                                   <ChevronDown className="h-4 w-4" />
                                 </Button>

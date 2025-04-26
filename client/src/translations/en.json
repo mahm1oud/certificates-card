@@ -172,8 +172,17 @@
     "title": "Share",
     "link": "Share Link",
     "copyLink": "Copy Link",
+    "copied": "Link Copied!",
     "download": "Download",
     "qrCode": "QR Code",
+    "preview": "Preview",
+    "description": "Choose a platform and share your card on social media",
+    "share": "Share",
+    "facebook": "Facebook",
+    "twitter": "Twitter",
+    "whatsapp": "WhatsApp",
+    "instagram": "Instagram",
+    "twitterText": "Check out this card I created!",
     "social": {
       "whatsapp": "WhatsApp",
       "facebook": "Facebook",
@@ -182,6 +191,18 @@
       "email": "Email"
     },
     "success": "Link copied successfully"
+  },
+  "socialMediaFormats": {
+    "title": "Social Media Formats",
+    "selectFormat": "Select Format",
+    "instagram": "Instagram",
+    "instagramStory": "Instagram Story",
+    "facebook": "Facebook",
+    "twitter": "Twitter",
+    "whatsapp": "WhatsApp",
+    "pinterest": "Pinterest",
+    "dimensions": "Dimensions",
+    "ratio": "Ratio"
   },
   "common": {
     "loading": "Loading...",
