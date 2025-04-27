@@ -55,14 +55,14 @@ const ShareOptions: React.FC<ShareOptionsProps> = ({ cardId, imageUrl }) => {
   });
   
   // Handle format selection
-  const handleFormatSelect = (format: string, formatData: SocialMediaFormat) => {
+  const handleFormatSelect = React.useCallback((format: string, formatData: SocialMediaFormat) => {
     setSelectedFormat(format);
     setSelectedFormatData(formatData);
     setSocialImageUrl(null);
     
     // Generate social media image for the selected format
     mutate({ format });
-  };
+  }, [mutate]);
   
   // Handle copy link
   const handleCopyLink = () => {

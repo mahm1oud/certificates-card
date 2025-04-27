@@ -39,24 +39,42 @@ export const SocialMediaFormats: React.FC<SocialMediaFormatsProps> = ({
   });
   
   // Select the format when tab changes
-  useEffect(() => {
-    if (data?.formats && activeTab) {
-      const formatData = data.formats[activeTab];
+  // Definir un controlador para gestionar manualmente cuando llamar a onFormatSelect
+  const handleTabChange = (tab: string) => {
+    setActiveTab(tab);
+    
+    if (data?.formats && tab) {
+      const formatData = data.formats[tab];
       if (formatData) {
-        onFormatSelect(activeTab, formatData);
+        onFormatSelect(tab, formatData);
+      }
+    } else if (defaultFormats && tab) {
+      // Usar el formato predeterminado si no hay datos disponibles
+      const formatData = defaultFormats[tab as keyof typeof defaultFormats];
+      if (formatData) {
+        onFormatSelect(tab, formatData);
       }
     }
-  }, [activeTab, data, onFormatSelect]);
+  };
   
-  // Default formats in case API call fails
-  const defaultFormats = {
+  // Efecto inicial para seleccionar el formato predeterminado solo al montar
+  useEffect(() => {
+    // Solo llamar a handleTabChange la primera vez cuando los datos están listos
+    if (data?.formats || defaultFormats) {
+      handleTabChange(activeTab);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data]);
+  
+  // Default formats in case API call fails - definirlo antes del useEffect
+  const defaultFormats = React.useMemo(() => ({
     instagram: { width: 1080, height: 1080, ratio: '1:1', description: 'Instagram (Square)' },
     instagramStory: { width: 1080, height: 1920, ratio: '9:16', description: 'Instagram Story' },
     facebook: { width: 1200, height: 630, ratio: '1.91:1', description: 'Facebook' },
     twitter: { width: 1200, height: 675, ratio: '16:9', description: 'Twitter' },
     whatsapp: { width: 800, height: 800, ratio: '1:1', description: 'WhatsApp' },
     pinterest: { width: 1000, height: 1500, ratio: '2:3', description: 'Pinterest' }
-  };
+  }), []);
   
   const formats = data?.formats || defaultFormats;
   
@@ -103,7 +121,7 @@ export const SocialMediaFormats: React.FC<SocialMediaFormatsProps> = ({
       <CardContent className="p-4">
         <h3 className="text-lg font-medium mb-3">{t('socialMediaFormats.title')}</h3>
         
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <Tabs value={activeTab} onValueChange={handleTabChange}>
           <TabsList className="mb-4 grid grid-cols-3 sm:grid-cols-6">
             {Object.keys(formats).map((formatKey) => (
               <TabsTrigger 
