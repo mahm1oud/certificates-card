@@ -28,65 +28,54 @@ try {
   const fontsDir = path.resolve(process.cwd(), 'fonts');
   console.log("Fonts directory:", fontsDir);
   
-  // Check if font files exist before attempting to register
-  const cairoRegPath = path.join(fontsDir, "Cairo-Regular.ttf");
-  const cairoBoldPath = path.join(fontsDir, "Cairo-Bold.ttf");
-  const tajawalRegPath = path.join(fontsDir, "Tajawal-Regular.ttf");
-  const tajawalBoldPath = path.join(fontsDir, "Tajawal-Bold.ttf");
-  const amiriRegPath = path.join(fontsDir, "Amiri-Regular.ttf");
-  const amiriBoldPath = path.join(fontsDir, "Amiri-Bold.ttf");
-  
-  // Check that files exist
+  // Check if font files exist
   console.log("Checking font files exist:");
-  console.log("Cairo Regular:", fs.existsSync(cairoRegPath), "Size:", fs.existsSync(cairoRegPath) ? fs.statSync(cairoRegPath).size : 'N/A');
-  console.log("Cairo Bold:", fs.existsSync(cairoBoldPath), "Size:", fs.existsSync(cairoBoldPath) ? fs.statSync(cairoBoldPath).size : 'N/A');
-  console.log("Tajawal Regular:", fs.existsSync(tajawalRegPath), "Size:", fs.existsSync(tajawalRegPath) ? fs.statSync(tajawalRegPath).size : 'N/A');
   
-  // Register each font, with better error handling for each
-  try {
-    registerFont(cairoRegPath, { family: "Cairo" });
+  const cairoRegular = path.join(fontsDir, 'Cairo-Regular.ttf');
+  const cairoBold = path.join(fontsDir, 'Cairo-Bold.ttf');
+  const tajawalRegular = path.join(fontsDir, 'Tajawal-Regular.ttf');
+  
+  console.log(`Cairo Regular: ${fs.existsSync(cairoRegular)} Size: ${fs.existsSync(cairoRegular) ? fs.statSync(cairoRegular).size : 'Not found'}`);
+  console.log(`Cairo Bold: ${fs.existsSync(cairoBold)} Size: ${fs.existsSync(cairoBold) ? fs.statSync(cairoBold).size : 'Not found'}`);
+  console.log(`Tajawal Regular: ${fs.existsSync(tajawalRegular)} Size: ${fs.existsSync(tajawalRegular) ? fs.statSync(tajawalRegular).size : 'Not found'}`);
+  
+  // Register the Cairo font family
+  if (fs.existsSync(cairoRegular)) {
+    registerFont(cairoRegular, { family: 'Cairo' });
     console.log("Cairo Regular font registered successfully");
-  } catch (error: any) {
-    console.warn("Failed to register Cairo Regular font:", error.message || error);
   }
   
-  try {
-    registerFont(cairoBoldPath, { family: "Cairo", weight: "bold" });
+  if (fs.existsSync(cairoBold)) {
+    registerFont(cairoBold, { family: 'Cairo', weight: 'bold' });
     console.log("Cairo Bold font registered successfully");
-  } catch (error: any) {
-    console.warn("Failed to register Cairo Bold font:", error.message || error);
   }
   
-  try {
-    registerFont(tajawalRegPath, { family: "Tajawal" });
+  // Register the Tajawal font family
+  if (fs.existsSync(tajawalRegular)) {
+    registerFont(tajawalRegular, { family: 'Tajawal' });
     console.log("Tajawal Regular font registered successfully");
-  } catch (error: any) {
-    console.warn("Failed to register Tajawal Regular font:", error.message || error);
   }
   
-  try {
-    registerFont(tajawalBoldPath, { family: "Tajawal", weight: "bold" });
+  const tajawalBold = path.join(fontsDir, 'Tajawal-Bold.ttf');
+  if (fs.existsSync(tajawalBold)) {
+    registerFont(tajawalBold, { family: 'Tajawal', weight: 'bold' });
     console.log("Tajawal Bold font registered successfully");
-  } catch (error: any) {
-    console.warn("Failed to register Tajawal Bold font:", error.message || error);
   }
   
-  try {
-    registerFont(amiriRegPath, { family: "Amiri" });
+  // Register the Amiri font family (elegant serif Arabic font)
+  const amiriRegular = path.join(fontsDir, 'Amiri-Regular.ttf');
+  if (fs.existsSync(amiriRegular)) {
+    registerFont(amiriRegular, { family: 'Amiri' });
     console.log("Amiri Regular font registered successfully");
-  } catch (error: any) {
-    console.warn("Failed to register Amiri Regular font:", error.message || error);
   }
   
-  try {
-    registerFont(amiriBoldPath, { family: "Amiri", weight: "bold" });
+  const amiriBold = path.join(fontsDir, 'Amiri-Bold.ttf');
+  if (fs.existsSync(amiriBold)) {
+    registerFont(amiriBold, { family: 'Amiri', weight: 'bold' });
     console.log("Amiri Bold font registered successfully");
-  } catch (error: any) {
-    console.warn("Failed to register Amiri Bold font:", error.message || error);
   }
   
   console.log("All Arabic fonts registered successfully");
-  // No need to show the global error message anymore since we have per-font error handling
 } catch (e: any) {
   console.warn("Error in font registration process:", e.message || e);
 }
@@ -96,13 +85,32 @@ try {
  * 
  * @param template The template to use for the card
  * @param formData The user input data to overlay on the template
+ * @param quality Quality setting for the generated image ('preview', 'download', 'low', 'medium', 'high')
  * @returns Path to the generated image
  */
-export async function generateCardImage(template: Template, formData: any): Promise<string> {
+export async function generateCardImage(
+  template: Template, 
+  formData: any, 
+  quality: 'preview' | 'download' | 'low' | 'medium' | 'high' = 'medium'
+): Promise<string> {
   try {
-    // Set canvas dimensions - increased for higher quality
-    const width = 1200;
-    const height = 1680;
+    console.log("Starting card image generation for template:", template.id, template.title);
+    console.log("Form data type:", typeof formData, "is array?", Array.isArray(formData));
+    
+    // Define the output path variable at the beginning of the function
+    let outputPath: string;
+    
+    // Set canvas dimensions based on quality for performance
+    let width, height;
+    
+    // Lower resolution for preview for faster rendering
+    if (quality === 'preview') {
+      width = 600;  // Half resolution for previews
+      height = 840;
+    } else {
+      width = 1200;
+      height = 1680;
+    }
     
     // Create canvas with higher resolution
     const canvas = createCanvas(width, height);
@@ -113,14 +121,37 @@ export async function generateCardImage(template: Template, formData: any): Prom
     // Note: imageSmoothingQuality might not be available in all canvas implementations
     (ctx as any).imageSmoothingQuality = 'high';
     
-    // Load template image
-    // Check if the image URL is relative or absolute
-    const imageUrl = template.imageUrl.startsWith('http') 
-      ? template.imageUrl 
-      : `${process.env.BASE_URL || 'http://localhost:5000'}${template.imageUrl}`;
+    // Validate template image URL
+    if (!template.imageUrl) {
+      throw new Error("Template image URL is missing");
+    }
     
-    console.log(`Loading template image from ${imageUrl}`);
-    const image = await loadImage(imageUrl);
+    // Check if the image URL is relative or absolute
+    let imageUrl;
+    try {
+      imageUrl = template.imageUrl.startsWith('http') 
+        ? template.imageUrl 
+        : `${process.env.BASE_URL || 'http://localhost:5000'}${template.imageUrl}`;
+      
+      console.log(`Attempting to load template image from ${imageUrl}`);
+    } catch (urlError) {
+      console.error("Failed to construct image URL:", urlError);
+      throw new Error("Invalid template image URL");
+    }
+    
+    // Setup a white background as fallback in case the image fails to load
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, width, height);
+    
+    let image;
+    try {
+      image = await loadImage(imageUrl);
+      console.log("Template image loaded successfully");
+    } catch (imageError) {
+      console.error("Failed to load template image:", imageError);
+      // Continue with white background instead of failing
+      console.log("Using white background as fallback for template image");
+    }
     
     // Extract template settings
     const templateSettings = template.settings as Record<string, any> || {};
@@ -136,7 +167,7 @@ export async function generateCardImage(template: Template, formData: any): Prom
     let offsetX = 0;
     let offsetY = 0;
     
-    if (aspectRatio === 'original') {
+    if (aspectRatio === 'original' && image) {
       // Maintain original image aspect ratio
       const origRatio = image.width / image.height;
       
@@ -150,6 +181,39 @@ export async function generateCardImage(template: Template, formData: any): Prom
         if (drawHeight < height) {
           offsetY = (height - drawHeight) / 2;
         } else if (drawHeight > height) {
+          // Early generation and return for specific crop case
+          // Set quality and format based on options
+          let outputQuality: number;
+          let imageFormat: string = "image/png";
+          
+          // Set quality based on parameter
+          switch(quality) {
+            case 'preview':
+              outputQuality = 0.6; // Lower quality for preview (<1MB)
+              imageFormat = "image/jpeg";
+              break;
+            case 'download':
+              outputQuality = 0.9; // Higher quality for download (up to 2MB)
+              break;
+            case 'low':
+              outputQuality = 0.4;
+              imageFormat = "image/jpeg";
+              break;
+            case 'medium':
+              outputQuality = 0.7;
+              break;
+            case 'high':
+              outputQuality = 0.9;
+              break;
+            default:
+              outputQuality = 0.8; // Default quality
+          }
+          
+          // Generate unique filename with appropriate extension
+          const extension = imageFormat === "image/jpeg" ? "jpg" : "png";
+          const filename = `${crypto.randomBytes(16).toString("hex")}_${quality}.${extension}`;
+          outputPath = path.join(process.cwd(), "uploads", filename);
+          
           // Crop excess height (centering the visible portion)
           const cropOffset = (drawHeight - height) / 2;
           ctx.save();
@@ -157,7 +221,25 @@ export async function generateCardImage(template: Template, formData: any): Prom
           ctx.clip();
           ctx.drawImage(image as any, 0, -cropOffset, drawWidth, drawHeight);
           ctx.restore();
-          return; // Skip regular drawing
+          
+          // Generate buffer based on format with appropriate settings
+          let buffer;
+          if (imageFormat === "image/jpeg") {
+            buffer = canvas.toBuffer("image/jpeg", { 
+              quality: outputQuality,
+              progressive: true
+            });
+          } else {
+            buffer = canvas.toBuffer("image/png", {
+              compressionLevel: quality === 'download' ? 0 : 4, // Lower compression level for download
+              filters: 0x1F, // Use all PNG filters for best quality 
+              resolution: quality === 'preview' ? 150 : 300, // Higher DPI for download
+              palette: undefined, // No palette to avoid color reduction
+            });
+          }
+          
+          fs.writeFileSync(outputPath, buffer);
+          return outputPath;
         }
       } else {
         // Landscape mode - fit to height
@@ -168,6 +250,39 @@ export async function generateCardImage(template: Template, formData: any): Prom
         if (drawWidth < width) {
           offsetX = (width - drawWidth) / 2;
         } else if (drawWidth > width) {
+          // Early generation and return for specific crop case
+          // Set quality and format based on options
+          let outputQuality: number;
+          let imageFormat: string = "image/png";
+          
+          // Set quality based on parameter
+          switch(quality) {
+            case 'preview':
+              outputQuality = 0.6; // Lower quality for preview (<1MB)
+              imageFormat = "image/jpeg";
+              break;
+            case 'download':
+              outputQuality = 0.9; // Higher quality for download (up to 2MB)
+              break;
+            case 'low':
+              outputQuality = 0.4;
+              imageFormat = "image/jpeg";
+              break;
+            case 'medium':
+              outputQuality = 0.7;
+              break;
+            case 'high':
+              outputQuality = 0.9;
+              break;
+            default:
+              outputQuality = 0.8; // Default quality
+          }
+          
+          // Generate unique filename with appropriate extension
+          const extension = imageFormat === "image/jpeg" ? "jpg" : "png";
+          const filename = `${crypto.randomBytes(16).toString("hex")}_${quality}.${extension}`;
+          outputPath = path.join(process.cwd(), "uploads", filename);
+
           // Crop excess width (centering the visible portion)
           const cropOffset = (drawWidth - width) / 2;
           ctx.save();
@@ -175,21 +290,36 @@ export async function generateCardImage(template: Template, formData: any): Prom
           ctx.clip();
           ctx.drawImage(image as any, -cropOffset, 0, drawWidth, drawHeight);
           ctx.restore();
-          return; // Skip regular drawing
+          
+          // Generate buffer based on format with appropriate settings
+          let buffer;
+          if (imageFormat === "image/jpeg") {
+            buffer = canvas.toBuffer("image/jpeg", { 
+              quality: outputQuality,
+              progressive: true
+            });
+          } else {
+            buffer = canvas.toBuffer("image/png", {
+              compressionLevel: quality === 'download' ? 0 : 4, // Lower compression level for download
+              filters: 0x1F, // Use all PNG filters for best quality 
+              resolution: quality === 'preview' ? 150 : 300, // Higher DPI for download
+              palette: undefined, // No palette to avoid color reduction
+            });
+          }
+          
+          fs.writeFileSync(outputPath, buffer);
+          return outputPath;
         }
       }
     } else if (aspectRatio === 'square') {
       // Force square aspect ratio
-      if (width !== height) {
-        // Choose the smaller dimension
-        const size = Math.min(width, height);
-        drawWidth = size;
-        drawHeight = size;
-        
-        // Center the square
-        offsetX = (width - size) / 2;
-        offsetY = (height - size) / 2;
-      }
+      const size = Math.min(width, height);
+      drawWidth = size;
+      drawHeight = size;
+      
+      // Center the square
+      offsetX = (width - size) / 2;
+      offsetY = (height - size) / 2;
     } else if (aspectRatio === 'custom' && templateSettings.customRatio) {
       // Apply custom aspect ratio
       const [customWidth, customHeight] = (templateSettings.customRatio as string).split(':').map(Number);
@@ -224,7 +354,9 @@ export async function generateCardImage(template: Template, formData: any): Prom
     
     // Draw template image with calculated dimensions
     console.log(`Drawing image with dimensions: ${drawWidth}x${drawHeight}, offset: ${offsetX},${offsetY}`);
-    ctx.drawImage(image as any, offsetX, offsetY, drawWidth, drawHeight);
+    if (image) {
+      ctx.drawImage(image, offsetX, offsetY, drawWidth, drawHeight);
+    }
     
     // Add semi-transparent overlay for better text visibility if needed
     if (!templateSettings.noOverlay) {
@@ -293,18 +425,56 @@ export async function generateCardImage(template: Template, formData: any): Prom
       }
     }
     
-    // Generate unique filename
-    const filename = `${crypto.randomBytes(16).toString("hex")}.png`;
-    const outputPath = path.join(process.cwd(), "uploads", filename);
+    // Set quality and format based on options
+    let outputQuality: number;
+    let imageFormat: string = "image/png";
     
-    // Save image to file with higher quality settings
-    const buffer = canvas.toBuffer("image/png", {
-      compressionLevel: 0, // No compression for highest quality (0-9, 0 = no compression)
-      // PNG_ALL_FILTERS = 0x1F per node-canvas documentation
-      filters: 0x1F, // Use all PNG filters for best quality 
-      resolution: 300, // Higher DPI for better quality (standard print quality)
-      palette: undefined, // No palette to avoid color reduction
-    });
+    // Set quality based on parameter
+    switch(quality) {
+      case 'preview':
+        outputQuality = 0.3; // Very low quality for fast preview (<500KB)
+        imageFormat = "image/jpeg";
+        break;
+      case 'download':
+        outputQuality = 0.9; // Higher quality for download (up to 2MB)
+        break;
+      case 'low':
+        outputQuality = 0.4;
+        imageFormat = "image/jpeg";
+        break;
+      case 'medium':
+        outputQuality = 0.7;
+        imageFormat = "image/jpeg"; // Use JPEG for medium quality too for better performance
+        break;
+      case 'high':
+        outputQuality = 0.9;
+        break;
+      default:
+        outputQuality = 0.5; // Default lower quality
+        imageFormat = "image/jpeg";
+    }
+    
+    // Generate unique filename with appropriate extension
+    const extension = imageFormat === "image/jpeg" ? "jpg" : "png";
+    const filename = `${crypto.randomBytes(16).toString("hex")}_${quality}.${extension}`;
+    outputPath = path.join(process.cwd(), "uploads", filename);
+    
+    // Generate buffer based on format with appropriate settings
+    let buffer;
+    if (imageFormat === "image/jpeg") {
+      buffer = canvas.toBuffer("image/jpeg", { 
+        quality: outputQuality,
+        progressive: true
+      });
+    } else {
+      buffer = canvas.toBuffer("image/png", {
+        compressionLevel: quality === 'download' ? 0 : 4, // Lower compression level for download
+        filters: 0x1F, // Use all PNG filters for best quality 
+        resolution: quality === 'preview' ? 150 : 300, // Higher DPI for download
+        palette: undefined, // No palette to avoid color reduction
+      });
+    }
+    
     fs.writeFileSync(outputPath, buffer);
     
     return outputPath;
@@ -415,11 +585,11 @@ function drawCustomFieldsWithStyles(ctx: any, formData: any, width: number, heig
           console.log(`Field ${fieldName} position Y: ${fieldConfig.position.y}% => ${Math.round(posY)}px`);
         } else {
           // استخدام موضع تلقائي بناءً على الحقول السابقة لتجنب التداخل
-          posY = findAvailableYPosition(usedPositions, posX, parseInt(fontSize), startY, spaceBetweenFields, index);
+          posY = findAvailableYPosition(usedPositions, posX, parseInt(fontSize as string), startY, spaceBetweenFields, index);
         }
       } else {
         // استخدام موضع تلقائي بناءً على الحقول السابقة لتجنب التداخل
-        posY = findAvailableYPosition(usedPositions, posX, parseInt(fontSize), startY, spaceBetweenFields, index);
+        posY = findAvailableYPosition(usedPositions, posX, parseInt(fontSize as string), startY, spaceBetweenFields, index);
       }
       
       // حساب عرض النص لاستخدامه في تتبع المواضع المستخدمة
@@ -431,7 +601,7 @@ function drawCustomFieldsWithStyles(ctx: any, formData: any, width: number, heig
       
       // تعديل الموضع إذا كان هناك أكثر من سطر لتجنب التداخل
       let currentY = posY;
-      const lineHeight = parseInt(fontSize) + 5;
+      const lineHeight = parseInt(fontSize as string) + 5;
       const totalTextHeight = lineHeight * lines.length;
       
       for (const line of lines) {
@@ -460,7 +630,7 @@ function drawCustomFieldsWithStyles(ctx: any, formData: any, width: number, heig
       // تسجيل الموضع المستخدم لهذا الحقل
       usedPositions.push({
         x: posX - (textWidth / 2),
-        y: posY - (parseInt(fontSize) / 2),
+        y: posY - (parseInt(fontSize as string) / 2),
         width: textWidth,
         height: totalTextHeight
       });
@@ -559,8 +729,7 @@ function findAvailableYPosition(
   return posY;
 }
 
-// دالة لرسم الحقول المخصصة على الصورة (الإعدادات الافتراضية)
-// Fix error related to fixTextColor
+// دالة لرسم الحقول المخصصة بتخطيط افتراضي
 function drawCustomFields(ctx: any, formData: any, width: number, height: number) {
   // Get template settings if available
   const fixTextColor = true; // Default to true for backward compatibility
@@ -568,7 +737,7 @@ function drawCustomFields(ctx: any, formData: any, width: number, height: number
   const fieldNames = Object.keys(formData);
   if (fieldNames.length === 0) return;
   
-  console.log(`Drawing ${fieldNames.length} custom fields on image with default styles`);
+  console.log(`Drawing ${fieldNames.length} custom fields on image with default layout`);
   
   // معلمات لتحديد موضع النص
   let spaceBetweenFields = height * 0.1;
@@ -576,227 +745,195 @@ function drawCustomFields(ctx: any, formData: any, width: number, height: number
     spaceBetweenFields = height * 0.7 / fieldNames.length;
   }
   
-  let startY = height * 0.2;
+  let startY = height * 0.15;
+  
+  // تتبع الموضع المستخدم لكل حقل لتجنب التداخل
+  const usedPositions: { x: number, y: number, height: number, width: number }[] = [];
   
   // رسم كل حقل
   fieldNames.forEach((fieldName, index) => {
     const text = formData[fieldName];
     if (!text) return;
     
-    // حجم الخط يعتمد على عدد الحقول
+    // تعيين الخط المناسب حسب عدد الحقول
     const fontSize = fieldNames.length > 5 ? 26 : 30;
     ctx.font = `${fontSize}px ${ARABIC_FONTS.CAIRO}`;
     
-    // رسم النص
+    // حساب الموضع مع تجنب التداخل
+    const posX = width / 2;
+    const posY = startY + (index * spaceBetweenFields);
+    
+    // حساب عرض النص لاستخدامه في تتبع المواضع المستخدمة
+    const textWidth = ctx.measureText(text).width;
+    
+    // رسم النص مع تطبيق التفاف الكلمات
     const lines = wrapText(ctx, text, width - 100);
-    let currentY = startY + (index * spaceBetweenFields);
+    let currentY = posY;
+    const lineHeight = fontSize + 5;
     
     for (const line of lines) {
-      ctx.fillText(line, width / 2, currentY);
-      currentY += fontSize + 5;
+      // إصلاح مشكلة لون النص الأسود الذي يظهر باللون الأبيض
+      if (fixTextColor && ctx.fillStyle && ctx.fillStyle.toString().toLowerCase() === '#000000') {
+        // حفظ سياق الرسم الحالي
+        ctx.save();
+        
+        // إزالة الظل للنص الأسود
+        ctx.shadowBlur = 0;
+        
+        // استخدام طريقة الرسم الصحيحة للون الأسود
+        ctx.fillStyle = 'rgb(0, 0, 0)';
+        ctx.fillText(line, posX, currentY);
+        
+        // استعادة سياق الرسم الأصلي
+        ctx.restore();
+      } else {
+        // رسم النص بالطريقة العادية
+        ctx.fillText(line, posX, currentY);
+      }
+      
+      currentY += lineHeight;
     }
   });
 }
 
+// حالات خاصة حسب نوع البطاقة
 function drawWeddingText(ctx: any, formData: any, width: number, height: number) {
-  // Set main title font
-  ctx.font = `40px ${ARABIC_FONTS.CAIRO_BOLD}`;
-  ctx.fillText(formData.groomName, width / 2, height * 0.25);
+  // أسماء العروسين
+  ctx.font = `bold 50px ${ARABIC_FONTS.CAIRO_BOLD}`;
+  ctx.textAlign = "center";
   
-  ctx.font = `30px ${ARABIC_FONTS.CAIRO}`;
-  ctx.fillText("&", width / 2, height * 0.32);
+  const nameY = height * 0.4;
   
-  ctx.font = `40px ${ARABIC_FONTS.CAIRO_BOLD}`;
-  ctx.fillText(formData.brideName, width / 2, height * 0.38);
-  
-  // Add shadow to text
-  ctx.shadowColor = "rgba(0, 0, 0, 0.7)";
-  ctx.shadowBlur = 5;
-  
-  // Set details font
-  ctx.font = `28px ${ARABIC_FONTS.TAJAWAL}`;
-  ctx.fillText("يتشرفان بدعوتكم لحضور حفل زفافهما", width / 2, height * 0.55);
-  
-  if (formData.weddingDate) {
-    ctx.fillText(`يوم ${formatDate(formData.weddingDate)}`, width / 2, height * 0.63);
+  if (formData.bride && formData.groom) {
+    ctx.fillText(`${formData.groom} & ${formData.bride}`, width / 2, nameY);
+  } else if (formData.names) {
+    ctx.fillText(formData.names, width / 2, nameY);
   }
   
-  if (formData.weddingTime) {
-    ctx.fillText(`الساعة ${formatTime(formData.weddingTime)}`, width / 2, height * 0.69);
+  // تاريخ الزفاف
+  if (formData.date) {
+    ctx.font = `45px ${ARABIC_FONTS.CAIRO}`;
+    ctx.fillText(formatDate(formData.date), width / 2, nameY + 80);
   }
   
-  if (formData.weddingLocation) {
-    ctx.fillText(formData.weddingLocation, width / 2, height * 0.75);
+  // مكان الحفل
+  if (formData.venue) {
+    ctx.font = `35px ${ARABIC_FONTS.CAIRO}`;
+    ctx.fillText(formData.venue, width / 2, nameY + 140);
   }
   
-  if (formData.additionalNotes) {
-    ctx.font = `22px ${ARABIC_FONTS.TAJAWAL}`;
-    ctx.fillText(formData.additionalNotes, width / 2, height * 0.85);
+  // وقت الحفل
+  if (formData.time) {
+    ctx.font = `35px ${ARABIC_FONTS.CAIRO}`;
+    ctx.fillText(formatTime(formData.time), width / 2, nameY + 190);
   }
 }
 
 function drawEngagementText(ctx: any, formData: any, width: number, height: number) {
-  // Set main title font
-  ctx.font = `40px ${ARABIC_FONTS.CAIRO_BOLD}`;
-  ctx.fillText(formData.groomName, width / 2, height * 0.25);
-  
-  ctx.font = `30px ${ARABIC_FONTS.CAIRO}`;
-  ctx.fillText("&", width / 2, height * 0.32);
-  
-  ctx.font = `40px ${ARABIC_FONTS.CAIRO_BOLD}`;
-  ctx.fillText(formData.brideName, width / 2, height * 0.38);
-  
-  // Add shadow to text
-  ctx.shadowColor = "rgba(0, 0, 0, 0.7)";
-  ctx.shadowBlur = 5;
-  
-  // Set details font
-  ctx.font = `28px ${ARABIC_FONTS.TAJAWAL}`;
-  ctx.fillText("يتشرفان بدعوتكم لحضور حفل خطوبتهما", width / 2, height * 0.55);
-  
-  if (formData.engagementDate) {
-    ctx.fillText(`يوم ${formatDate(formData.engagementDate)}`, width / 2, height * 0.63);
-  }
-  
-  if (formData.engagementTime) {
-    ctx.fillText(`الساعة ${formatTime(formData.engagementTime)}`, width / 2, height * 0.69);
-  }
-  
-  if (formData.engagementLocation) {
-    ctx.fillText(formData.engagementLocation, width / 2, height * 0.75);
-  }
-  
-  if (formData.additionalNotes) {
-    ctx.font = `22px ${ARABIC_FONTS.TAJAWAL}`;
-    ctx.fillText(formData.additionalNotes, width / 2, height * 0.85);
-  }
+  // محتوى مشابه لبطاقة الزفاف
+  drawWeddingText(ctx, formData, width, height);
 }
 
 function drawGraduationText(ctx: any, formData: any, width: number, height: number) {
-  // Set main title font
-  ctx.font = `45px ${ARABIC_FONTS.CAIRO_BOLD}`;
-  ctx.fillText("تهنئة تخرج", width / 2, height * 0.2);
+  // اسم الطالب
+  ctx.font = `bold 50px ${ARABIC_FONTS.CAIRO_BOLD}`;
+  ctx.textAlign = "center";
   
-  ctx.font = `40px ${ARABIC_FONTS.CAIRO_BOLD}`;
-  ctx.fillText(formData.graduateName, width / 2, height * 0.3);
+  const nameY = height * 0.4;
   
-  // Add shadow to text
-  ctx.shadowColor = "rgba(0, 0, 0, 0.7)";
-  ctx.shadowBlur = 5;
+  if (formData.student) {
+    ctx.fillText(formData.student, width / 2, nameY);
+  }
   
-  // Set details font
-  ctx.font = `30px ${ARABIC_FONTS.TAJAWAL}`;
+  // الشهادة أو التخصص
   if (formData.degree) {
-    ctx.fillText(`بمناسبة التخرج من ${formData.degree}`, width / 2, height * 0.45);
+    ctx.font = `45px ${ARABIC_FONTS.CAIRO}`;
+    ctx.fillText(formData.degree, width / 2, nameY + 80);
   }
   
-  if (formData.university) {
-    ctx.fillText(formData.university, width / 2, height * 0.53);
+  // الجامعة أو المدرسة
+  if (formData.institution) {
+    ctx.font = `35px ${ARABIC_FONTS.CAIRO}`;
+    ctx.fillText(formData.institution, width / 2, nameY + 140);
   }
   
-  if (formData.graduationDate) {
-    ctx.fillText(`${formatDate(formData.graduationDate)}`, width / 2, height * 0.6);
-  }
-  
-  if (formData.message) {
-    ctx.font = `24px ${ARABIC_FONTS.TAJAWAL}`;
-    const lines = wrapText(ctx, formData.message, width - 100);
-    let y = height * 0.7;
-    for (const line of lines) {
-      ctx.fillText(line, width / 2, y);
-      y += 35;
-    }
+  // سنة التخرج
+  if (formData.year) {
+    ctx.font = `45px ${ARABIC_FONTS.CAIRO_BOLD}`;
+    ctx.fillText(formData.year, width / 2, nameY + 190);
   }
 }
 
 function drawEidText(ctx: any, formData: any, width: number, height: number) {
-  // Set main title font
-  ctx.font = `45px ${ARABIC_FONTS.CAIRO_BOLD}`;
-  ctx.fillText(`عيد ${formData.eidType} مبارك`, width / 2, height * 0.25);
+  // تهنئة العيد
+  ctx.font = `bold 50px ${ARABIC_FONTS.AMIRI_BOLD}`;
+  ctx.textAlign = "center";
   
-  // Add shadow to text
-  ctx.shadowColor = "rgba(0, 0, 0, 0.7)";
-  ctx.shadowBlur = 5;
+  const greetingY = height * 0.4;
   
-  // Set details font
-  ctx.font = `30px ${ARABIC_FONTS.TAJAWAL}`;
-  if (formData.recipient) {
-    ctx.fillText(`إلى: ${formData.recipient}`, width / 2, height * 0.4);
+  if (formData.greeting) {
+    ctx.fillText(formData.greeting, width / 2, greetingY);
+  } else {
+    ctx.fillText("عيد مبارك", width / 2, greetingY);
   }
   
+  // من (المرسل)
+  if (formData.from) {
+    ctx.font = `40px ${ARABIC_FONTS.CAIRO}`;
+    ctx.fillText(`من: ${formData.from}`, width / 2, greetingY + 80);
+  }
+  
+  // إلى (المستقبل)
+  if (formData.to) {
+    ctx.font = `40px ${ARABIC_FONTS.CAIRO}`;
+    ctx.fillText(`إلى: ${formData.to}`, width / 2, greetingY + 140);
+  }
+  
+  // رسالة إضافية
   if (formData.message) {
-    ctx.font = `26px ${ARABIC_FONTS.TAJAWAL}`;
-    const lines = wrapText(ctx, formData.message, width - 100);
-    let y = height * 0.55;
+    ctx.font = `30px ${ARABIC_FONTS.AMIRI}`;
+    const lines = wrapText(ctx, formData.message, width - 150);
+    let messageY = greetingY + 210;
+    
     for (const line of lines) {
-      ctx.fillText(line, width / 2, y);
-      y += 35;
+      ctx.fillText(line, width / 2, messageY);
+      messageY += 40;
     }
-  }
-  
-  if (formData.sender) {
-    ctx.font = `28px ${ARABIC_FONTS.TAJAWAL}`;
-    ctx.fillText(`من: ${formData.sender}`, width / 2, height * 0.85);
   }
 }
 
 function drawRamadanText(ctx: any, formData: any, width: number, height: number) {
-  // Set main title font
-  ctx.font = `45px ${ARABIC_FONTS.CAIRO_BOLD}`;
-  ctx.fillText("رمضان كريم", width / 2, height * 0.25);
-  
-  // Add shadow to text
-  ctx.shadowColor = "rgba(0, 0, 0, 0.7)";
-  ctx.shadowBlur = 5;
-  
-  if (formData.year) {
-    ctx.font = `30px ${ARABIC_FONTS.CAIRO}`;
-    ctx.fillText(formData.year, width / 2, height * 0.33);
-  }
-  
-  // Set details font
-  ctx.font = `30px ${ARABIC_FONTS.TAJAWAL}`;
-  if (formData.recipient) {
-    ctx.fillText(`إلى: ${formData.recipient}`, width / 2, height * 0.45);
-  }
-  
-  if (formData.message) {
-    ctx.font = `26px ${ARABIC_FONTS.TAJAWAL}`;
-    const lines = wrapText(ctx, formData.message, width - 100);
-    let y = height * 0.55;
-    for (const line of lines) {
-      ctx.fillText(line, width / 2, y);
-      y += 35;
-    }
-  }
-  
-  if (formData.sender) {
-    ctx.font = `28px ${ARABIC_FONTS.TAJAWAL}`;
-    ctx.fillText(`من: ${formData.sender}`, width / 2, height * 0.85);
-  }
+  // محتوى مشابه لبطاقة العيد
+  drawEidText(ctx, formData, width, height);
 }
 
-// Helper function to wrap text
+// Utility function to wrap text
 function wrapText(ctx: any, text: string, maxWidth: number): string[] {
+  if (!text) return [];
+  
+  // Split the text into words
   const words = text.split(' ');
-  const lines = [];
-  let currentLine = '';
-
-  for (let i = 0; i < words.length; i++) {
+  const lines: string[] = [];
+  let currentLine = words[0];
+  
+  for (let i = 1; i < words.length; i++) {
     const word = words[i];
     const width = ctx.measureText(currentLine + ' ' + word).width;
     
     if (width < maxWidth) {
-      currentLine += (currentLine ? ' ' : '') + word;
+      currentLine += ' ' + word;
     } else {
       lines.push(currentLine);
       currentLine = word;
     }
   }
   
-  if (currentLine) {
-    lines.push(currentLine);
-  }
-  
+  lines.push(currentLine);
   return lines;
+}
+
+// Certificate generation
+export async function generateCertificateImage(template: Template, formData: any): Promise<string> {
+  // For now, redirect to card image generation with the same function
+  return generateCardImage(template, formData, 'download');
 }

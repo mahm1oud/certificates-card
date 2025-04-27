@@ -68,13 +68,40 @@ export async function generateSocialImage(
   templateImagePath: string,
   format: string | SocialFormat,
   options: {
-    quality?: 'low' | 'medium' | 'high',
+    quality?: 'low' | 'medium' | 'high' | 'preview' | 'download',
     watermark?: boolean,
     watermarkText?: string,
     cropMode?: 'fit' | 'fill' | 'cover'
   } = {}
 ): Promise<string> {
   try {
+    // Set quality and format based on options
+    let outputQuality: number;
+    let imageFormat: string = "image/png";
+    
+    // Set quality based on options
+    switch(options.quality) {
+      case 'preview':
+        outputQuality = 0.6; // Lower quality for preview (<1MB)
+        imageFormat = "image/jpeg";
+        break;
+      case 'download':
+        outputQuality = 0.9; // Higher quality for download (up to 2MB)
+        break;
+      case 'low':
+        outputQuality = 0.4;
+        imageFormat = "image/jpeg";
+        break;
+      case 'medium':
+        outputQuality = 0.7;
+        break;
+      case 'high':
+        outputQuality = 0.9;
+        break;
+      default:
+        outputQuality = 0.8; // Default quality
+    }
+    
     // Determine the format to use
     let formatSpec: SocialFormat;
     
@@ -149,12 +176,18 @@ export async function generateSocialImage(
       ctx.globalAlpha = 1.0;
     }
     
-    // Generate unique filename
-    const filename = `social_${crypto.randomBytes(8).toString("hex")}_${format}.png`;
+    // Generate unique filename with appropriate extension
+    const extension = imageFormat === "image/jpeg" ? "jpg" : "png";
+    const qualitySuffix = options.quality || "medium";
+    const formatName = typeof format === 'string' ? format : 'custom';
+    const filename = `social_${crypto.randomBytes(8).toString("hex")}_${formatName}_${qualitySuffix}.${extension}`;
     const outputPath = path.join(process.cwd(), "uploads", filename);
     
-    // Save image to file
-    const buffer = canvas.toBuffer("image/png");
+    // Generate buffer based on format
+    const buffer = imageFormat === "image/jpeg" 
+      ? canvas.toBuffer("image/jpeg", { quality: outputQuality }) 
+      : canvas.toBuffer("image/png");
+    
     fs.writeFileSync(outputPath, buffer);
     
     return `/uploads/${filename}`;

@@ -22,6 +22,7 @@ import { db } from "./db";
 import adminSettingsRouter from './api/admin-settings';
 import authSettingsRouter from './api/auth-settings';
 import adminStatsRouter from './api/admin-stats';
+import cardsRouter from './api/cards';
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Setup directory structure
@@ -301,46 +302,142 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // API endpoint for generating cards (used by template form)
   app.post("/api/cards/generate", async (req, res) => {
     try {
+      console.log("Received card generation request:", req.body);
       const { templateId, category, formData, quality = 'medium' } = req.body;
+      
+      // Validate required parameters
+      if (!templateId) {
+        console.error("Missing templateId in the request");
+        return res.status(400).json({ message: "معرف القالب مفقود" });
+      }
+      
+      if (!formData) {
+        console.error("Missing formData in the request");
+        return res.status(400).json({ message: "بيانات النموذج مفقودة" });
+      }
       
       console.log(`Generating card for template ID: ${templateId}, category: ${category}`);
       
-      // Get the template
-      const template = await storage.getTemplate(Number(templateId));
-      
-      if (!template) {
-        console.error(`Template with ID ${templateId} not found`);
-        return res.status(404).json({ message: "القالب غير موجود" });
+      try {
+        // Get the template
+        const template = await storage.getTemplate(Number(templateId));
+        
+        if (!template) {
+          console.error(`Template with ID ${templateId} not found`);
+          return res.status(404).json({ message: "القالب غير موجود" });
+        }
+        
+        if (!template.imageUrl) {
+          console.error(`Template with ID ${templateId} does not have an image URL`);
+          return res.status(400).json({ message: "الصورة الأساسية للقالب غير متوفرة" });
+        }
+        
+        console.log(`Found template: ${template.title}, image URL: ${template.imageUrl}`);
+        console.log(`Parsed form data:`, typeof formData, formData);
+        
+        // Parse form data if it's a string
+        let parsedFormData = formData;
+        if (typeof formData === 'string') {
+          try {
+            parsedFormData = JSON.parse(formData);
+          } catch (parseError) {
+            console.error("Error parsing form data JSON:", parseError);
+            return res.status(400).json({ message: "صيغة بيانات النموذج غير صحيحة" });
+          }
+        }
+        
+        console.log(`Generating card with parsed formData:`, parsedFormData);
+        
+        // Generate the card image
+        try {
+          console.log(`Attempting to generate card image for template ID: ${template.id}, Title: ${template.title}`);
+          console.log(`Template image URL: ${template.imageUrl}`);
+          
+          let imagePath;
+          try {
+            // إنشاء صورة البطاقة مع معالجة الأخطاء المحسنة ومع إعدادات الجودة
+            imagePath = await generateCardImage(template, parsedFormData, quality as 'preview' | 'download' | 'low' | 'medium' | 'high');
+            console.log(`Card image successfully generated at: ${imagePath} with quality: ${quality}`);
+          } catch (cardImageError) {
+            console.error("Error in card image generation:", cardImageError);
+            
+            // إنشاء صورة بيضاء احتياطية بدلاً من الفشل
+            console.log("Creating fallback white image due to generation error");
+            const { createCanvas } = await import('canvas');
+            const fs = await import('fs');
+            const path = await import('path');
+            const crypto = await import('crypto');
+            
+            // إنشاء كانفاس بخلفية بيضاء
+            const canvas = createCanvas(1200, 1680);
+            const ctx = canvas.getContext('2d');
+            
+            // خلفية بيضاء
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, 1200, 1680);
+            
+            // إضافة نص صغير لتوضيح أن هذه صورة احتياطية
+            ctx.fillStyle = '#cccccc';
+            ctx.font = '20px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('خطأ في تحميل صورة القالب', 600, 840);
+            
+            // حفظ الصورة
+            const filename = `fallback_${crypto.randomBytes(8).toString("hex")}.png`;
+            const outputPath = path.join(process.cwd(), "uploads", filename);
+            
+            // التأكد من وجود مجلد التحميل
+            await fs.promises.mkdir(path.join(process.cwd(), 'uploads'), { recursive: true });
+            
+            const buffer = canvas.toBuffer("image/png");
+            await fs.promises.writeFile(outputPath, buffer);
+            
+            imagePath = outputPath;
+            console.log(`Created fallback image at: ${imagePath}`);
+          }
+          
+          if (!imagePath) {
+            throw new Error("Image generation did not return a valid file path");
+          }
+          
+          // حفظ المعلومات بغض النظر عن نجاح إنشاء الصورة
+          const card = await storage.createCard({
+            templateId: template.id,
+            userId: req.isAuthenticated() ? req.user?.id : null,
+            formData: parsedFormData,
+            imageUrl: `/uploads/${path.basename(imagePath)}`,
+            categoryId: template.categoryId,
+            quality,
+            publicId: randomUUID(),
+            status: 'active'
+          });
+          
+          console.log(`Card created with ID: ${card.id}, publicId: ${card.publicId}`);
+          res.json({
+            cardId: card.id,
+            publicId: card.publicId,
+            imageUrl: card.imageUrl
+          });
+        } catch (imageError) {
+          console.error("Error in card creation process:", imageError);
+          return res.status(500).json({ 
+            message: "حدث خطأ أثناء إنشاء البطاقة",
+            details: typeof imageError === 'object' && imageError !== null ? imageError.message : String(imageError)
+          });
+        }
+      } catch (dbError) {
+        console.error("Database error while generating card:", dbError);
+        return res.status(500).json({ 
+          message: "حدث خطأ في قاعدة البيانات أثناء إنشاء البطاقة",
+          details: dbError.message
+        });
       }
-      
-      console.log(`Found template: ${template.title}, image: ${template.imageUrl}`);
-      console.log(`Generating card with formData:`, formData);
-      
-      // Generate the card image
-      const imagePath = await generateCardImage(template, formData);
-      console.log(`Card image generated at: ${imagePath}`);
-      
-      // Save the card to storage
-      const card = await storage.createCard({
-        templateId: template.id,
-        userId: req.isAuthenticated() ? req.user?.id : null,
-        formData,
-        imageUrl: `/uploads/${path.basename(imagePath)}`,
-        categoryId: template.categoryId,
-        quality,
-        publicId: randomUUID(),
-        status: 'active'
-      });
-      
-      console.log(`Card created with ID: ${card.id}, publicId: ${card.publicId}`);
-      res.json({
-        cardId: card.id,
-        publicId: card.publicId,
-        imageUrl: card.imageUrl
-      });
     } catch (error) {
-      console.error("Error generating card:", error);
-      res.status(500).json({ message: "حدث خطأ أثناء إنشاء البطاقة" });
+      console.error("Unexpected error generating card:", error);
+      res.status(500).json({ 
+        message: "حدث خطأ غير متوقع أثناء إنشاء البطاقة",
+        details: error.message
+      });
     }
   });
 
@@ -959,6 +1056,100 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ message: "حدث خطأ أثناء حذف القالب" });
     }
   });
+  
+  // إضافة مسار عام للوصول إلى حقول القالب بدون مصادقة (لعرض البطاقة)
+  // مسار API عام لحقول القالب للاستخدام في معاينة البطاقة
+  app.get("/api/templates/:templateId/public-fields", async (req, res) => {
+    try {
+      const { templateId } = req.params;
+      const template = await storage.getTemplate(parseInt(templateId));
+      
+      if (!template) {
+        return res.status(404).json({ message: "القالب غير موجود" });
+      }
+      
+      const fields = await storage.getTemplateFields(parseInt(templateId));
+      console.log(`Retrieved ${fields.length} fields for template ID ${templateId} (public API)`);
+      res.json(fields);
+    } catch (error) {
+      console.error("Error fetching template fields:", error);
+      res.status(500).json({ message: "حدث خطأ أثناء تحميل حقول القالب" });
+    }
+  });
+  
+  // API لجلب حقول القالب (عام)
+  app.get("/api/templates/:templateId/fields", async (req, res) => {
+    try {
+      const { templateId } = req.params;
+      const template = await storage.getTemplate(parseInt(templateId));
+      
+      if (!template) {
+        return res.status(404).json({ message: "القالب غير موجود" });
+      }
+      
+      const fields = await storage.getTemplateFields(parseInt(templateId));
+      console.log(`Retrieved ${fields.length} fields for template ID ${templateId} (public API)`);
+      res.json(fields);
+    } catch (error) {
+      console.error("Error fetching template fields:", error);
+      res.status(500).json({ message: "حدث خطأ أثناء تحميل حقول القالب" });
+    }
+  });
+
+  // API لنسخ حقول القالب
+  app.post("/api/templates/:id/copy-fields", isAuthenticated, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const sourceTemplateId = parseInt(id);
+      const { targetTemplateId } = req.body;
+      
+      if (!targetTemplateId) {
+        return res.status(400).json({ message: "معرف القالب الهدف مطلوب" });
+      }
+      
+      // التحقق من وجود القالب المصدر
+      const sourceTemplate = await storage.getTemplate(sourceTemplateId);
+      if (!sourceTemplate) {
+        return res.status(404).json({ message: "قالب المصدر غير موجود" });
+      }
+      
+      // التحقق من وجود القالب الهدف
+      const targetTemplate = await storage.getTemplate(targetTemplateId);
+      if (!targetTemplate) {
+        return res.status(404).json({ message: "قالب الهدف غير موجود" });
+      }
+      
+      // جلب حقول القالب المصدر
+      const sourceFields = await storage.getTemplateFields(sourceTemplateId);
+      if (!sourceFields.length) {
+        return res.status(404).json({ message: "لا توجد حقول للنسخ من قالب المصدر" });
+      }
+      
+      // نسخ كل حقل إلى القالب الهدف
+      const copiedFields = [];
+      
+      for (const field of sourceFields) {
+        const { id: fieldId, templateId, ...fieldData } = field;
+        
+        // إنشاء حقل جديد باستخدام البيانات من الحقل المصدر
+        const newField = await storage.createTemplateField({
+          ...fieldData,
+          templateId: targetTemplateId
+        });
+        
+        copiedFields.push(newField);
+      }
+      
+      res.status(200).json({
+        message: "تم نسخ الحقول بنجاح",
+        count: copiedFields.length,
+        fields: copiedFields
+      });
+    } catch (error) {
+      console.error("Error copying template fields:", error);
+      res.status(500).json({ message: "حدث خطأ أثناء نسخ حقول القالب" });
+    }
+  });
 
   // Template Fields CRUD operations (admin only)
   // Get template fields by template ID or all fields
@@ -1412,9 +1603,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Serve uploaded card images and files
   app.use("/uploads", express.static(uploadsDir));
+  
+  // Use cards router for card-related endpoints
+  app.use('/api/cards', cardsRouter);
 
   // Copy fields from one template to another (admin)
-  app.post("/api/admin/copy-template-fields", isAuthenticated, isAdmin, async (req, res) => {
+  app.post("/api/templates/copy-fields", isAuthenticated, async (req, res) => {
     try {
       const { sourceTemplateId, targetTemplateId, fieldIds } = req.body;
       
@@ -1422,38 +1616,73 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "معرف القالب المصدر والهدف مطلوبان" });
       }
       
-      // Get the fields to copy
+      // Get the source template fields
+      const sourceFields = await storage.getTemplateFields(parseInt(sourceTemplateId));
+      
+      if (!sourceFields || sourceFields.length === 0) {
+        return res.status(404).json({ message: "لا توجد حقول في القالب المصدر" });
+      }
+      
+      // Get the target template fields to prevent duplicates
+      const targetFields = await storage.getTemplateFields(parseInt(targetTemplateId));
+      const targetFieldNames = targetFields.map(field => field.name);
+      
+      // Determine which fields to copy
       let fieldsToCopy = [];
       if (fieldIds && fieldIds.length > 0) {
         // Copy only selected fields
-        const sourceFields = await storage.getTemplateFields(parseInt(sourceTemplateId));
         fieldsToCopy = sourceFields.filter(field => fieldIds.includes(field.id));
       } else {
         // Copy all fields
-        fieldsToCopy = await storage.getTemplateFields(parseInt(sourceTemplateId));
+        fieldsToCopy = sourceFields;
       }
       
+      // Filter out fields that already exist in the target template (by name)
+      const uniqueFieldsToCopy = fieldsToCopy.filter(field => !targetFieldNames.includes(field.name));
+      
       // Get the current fields for the target template to determine the next display order
-      const targetFields = await storage.getTemplateFields(parseInt(targetTemplateId));
       const nextDisplayOrder = targetFields.length;
       
       // Create each field in the target template
       const createdFields = [];
+      const duplicateFields = [];
+      
       for (let i = 0; i < fieldsToCopy.length; i++) {
         const field = fieldsToCopy[i];
+        
+        // Skip fields that already exist in target
+        if (targetFieldNames.includes(field.name)) {
+          duplicateFields.push(field.name);
+          continue;
+        }
+        
         const { id, ...fieldData } = field; // Remove id to create a new field
         
         const newField = await storage.createTemplateField({
           ...fieldData,
           templateId: parseInt(targetTemplateId),
-          displayOrder: nextDisplayOrder + i,
+          displayOrder: nextDisplayOrder + createdFields.length,
         });
         
         createdFields.push(newField);
       }
       
+      // Prepare response based on results
+      let message = "";
+      if (createdFields.length > 0) {
+        message = `تم نسخ ${createdFields.length} حقل بنجاح`;
+        if (duplicateFields.length > 0) {
+          message += `. تم تجاوز ${duplicateFields.length} حقل موجود مسبقاً`;
+        }
+      } else if (duplicateFields.length > 0) {
+        message = `لم يتم نسخ أي حقول. جميع الحقول المحددة موجودة مسبقاً في القالب الهدف`;
+      }
+      
       res.status(201).json({ 
-        message: `تم نسخ ${createdFields.length} حقل بنجاح`,
+        message,
+        copied: createdFields.length,
+        skipped: duplicateFields.length,
+        duplicateFields,
         fields: createdFields
       });
     } catch (error) {
