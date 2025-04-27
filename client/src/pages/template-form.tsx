@@ -42,22 +42,83 @@ const TemplateForm = () => {
     e.preventDefault();
     
     try {
-      const response = await apiRequest('POST', '/api/cards/generate', {
-        templateId,
-        category,
-        formData
+      console.log("Submitting form data:", { templateId, category, formData });
+      
+      // إضافة بيانات توضيحية للتشخيص
+      if (!templateId || !category) {
+        console.error("Missing required parameters:", { templateId, category });
+        toast({
+          title: "خطأ",
+          description: "بيانات القالب غير مكتملة",
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      // إظهار إشعار بأننا نقوم بإنشاء البطاقة
+      toast({
+        title: "جاري الإنشاء...",
+        description: "يتم الآن إنشاء البطاقة، يرجى الانتظار",
       });
       
-      const data = await response.json();
-      
-      setLocation(`/preview/${category}/${templateId}/${data.cardId}`);
-    } catch (error) {
+      try {
+        // إرسال الطلب مع زيادة وقت انتهاء الصلاحية (timeout) لمعالجة الإتصالات البطيئة
+        const response = await apiRequest(
+          'POST', // تحديد طريقة HTTP بوضوح
+          '/api/cards/generate', 
+          {
+            templateId,
+            category,
+            formData
+          }, 
+          {
+            timeout: 30000, // 30 ثانية
+          }
+        );
+        
+        // عند استخدام apiRequest المحسنة، النتيجة هي بالفعل JSON response
+        const data = response;
+        console.log("Card created successfully:", data);
+        
+        if (!data.cardId) {
+          console.error("API response missing cardId:", data);
+          toast({
+            title: "خطأ",
+            description: "تم إنشاء البطاقة ولكن تعذر الانتقال إلى صفحة المعاينة",
+            variant: "destructive",
+          });
+          return;
+        }
+        
+        // الانتقال إلى صفحة المعاينة
+        const previewUrl = `/preview/${category}/${templateId}/${data.cardId}`;
+        console.log("Navigating to preview URL:", previewUrl);
+        setLocation(previewUrl);
+      } catch (apiError: any) {
+        console.error("API Error:", apiError);
+        
+        // معالجة أنواع الأخطاء المختلفة
+        let errorMessage = "حدث خطأ أثناء إنشاء البطاقة، يرجى المحاولة مرة أخرى";
+        
+        if (apiError.message?.includes("timeout") || apiError.name === "AbortError") {
+          errorMessage = "استغرق الطلب وقتا طويلا. تحقق من اتصالك بالإنترنت وحاول مرة أخرى.";
+        } else if (apiError.message?.includes("القالب غير موجود")) {
+          errorMessage = "القالب المحدد غير متوفر، يرجى اختيار قالب آخر.";
+        }
+        
+        toast({
+          title: "خطأ",
+          description: errorMessage,
+          variant: "destructive",
+        });
+      }
+    } catch (error: any) {
+      console.error("General Error:", error);
       toast({
         title: "خطأ",
-        description: "حدث خطأ أثناء إنشاء البطاقة، يرجى المحاولة مرة أخرى",
+        description: "حدث خطأ غير متوقع، يرجى المحاولة مرة أخرى",
         variant: "destructive",
       });
-      console.error(error);
     }
   };
 

@@ -12,7 +12,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
-import { Plus, Minus, Trash2, ChevronUp, ChevronDown, Loader2 } from "lucide-react";
+import { Plus, Minus, Trash2, ChevronUp, ChevronDown, Loader2, Copy } from "lucide-react";
+import { CopyFieldsDialog } from "@/components/template-editor/CopyFieldsDialog";
 
 type TextShadow = {
   enabled: boolean;
@@ -74,6 +75,7 @@ export default function TemplateFieldsPage() {
   const [template, setTemplate] = useState<Template | null>(null);
   const [fields, setFields] = useState<TemplateField[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [copyDialogOpen, setCopyDialogOpen] = useState(false);
   const [editingField, setEditingField] = useState<number | null>(null);
   const [newOption, setNewOption] = useState("");
   
@@ -116,7 +118,7 @@ export default function TemplateFieldsPage() {
   
   // Query to fetch template fields
   const { data: fieldsData, isLoading: isFieldsLoading, refetch: refetchFields } = useQuery({
-    queryKey: [`/api/templates/${templateId}/fields`],
+    queryKey: [`/api/admin/template-fields/${templateId}`],
     enabled: !!templateId
   });
   
@@ -134,7 +136,7 @@ export default function TemplateFieldsPage() {
   const createFieldMutation = useMutation({
     mutationFn: (data: any) => {
       return apiRequest({
-        url: `/api/templates/${templateId}/fields`,
+        url: `/api/admin/template-fields/${templateId}`,
         method: "POST",
         body: data
       });
@@ -160,7 +162,7 @@ export default function TemplateFieldsPage() {
   const updateFieldMutation = useMutation({
     mutationFn: (data: any) => {
       return apiRequest({
-        url: `/api/templates/${templateId}/fields/${editingField}`,
+        url: `/api/admin/template-fields/${templateId}/${editingField}`,
         method: "PUT",
         body: data
       });
@@ -186,7 +188,7 @@ export default function TemplateFieldsPage() {
   const deleteFieldMutation = useMutation({
     mutationFn: (fieldId: number) => {
       return apiRequest({
-        url: `/api/templates/${templateId}/fields/${fieldId}`,
+        url: `/api/admin/template-fields/${templateId}/${fieldId}`,
         method: "DELETE"
       });
     },
@@ -400,21 +402,25 @@ export default function TemplateFieldsPage() {
           <Button variant="outline" onClick={() => setLocation(`/admin/templates`)}>
             العودة للقوالب
           </Button>
-          <Button variant="outline" onClick={(e) => {
-            e.preventDefault(); // منع الانتقال الافتراضي
-            if (confirm("هل تريد نسخ حقول هذا القالب إلى قالب آخر؟")) {
-              // هنا يمكن إضافة منطق نسخ الحقول
-              toast({
-                title: "جاري تطوير الميزة",
-                description: "سيتم إضافة هذه الميزة قريبًا"
-              });
-            }
-          }}>
+          <Button 
+            variant="outline" 
+            onClick={() => setCopyDialogOpen(true)}
+            className="flex items-center gap-2"
+          >
+            <Copy className="h-4 w-4" />
             نسخ الحقول
           </Button>
           <Button onClick={handleAddField}>إضافة حقل جديد</Button>
         </div>
       </div>
+      
+      {/* مربع حوار نسخ الحقول */}
+      <CopyFieldsDialog 
+        open={copyDialogOpen}
+        onOpenChange={setCopyDialogOpen}
+        sourceTemplateId={parseInt(templateId as string)}
+        onSuccess={refetchFields}
+      />
       
       <div className="grid md:grid-cols-2 gap-8">
         <div>

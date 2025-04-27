@@ -66,8 +66,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const loginMutation = useMutation({
     mutationFn: async (credentials: LoginData) => {
-      const res = await apiRequest("POST", "/api/login", credentials);
-      return await res.json();
+      try {
+        // استخدام fetch مباشرة مع معالجة أكثر تفصيلا للخطأ
+        const response = await fetch('/api/login', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(credentials),
+          credentials: 'include',
+        });
+
+        if (!response.ok) {
+          // محاولة قراءة رسالة الخطأ
+          const contentType = response.headers.get('content-type');
+          if (contentType && contentType.includes('application/json')) {
+            const errorData = await response.json();
+            throw new Error(errorData.message || `فشل تسجيل الدخول: ${response.status}`);
+          } else {
+            // إذا كانت الاستجابة ليست JSON
+            const errorText = await response.text();
+            console.error("استجابة غير صالحة من الخادم:", errorText);
+            throw new Error(`فشل تسجيل الدخول: ${response.status}`);
+          }
+        }
+
+        // التحقق من نوع المحتوى قبل محاولة معالجة JSON
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+          return await response.json();
+        } else {
+          console.error("استجابة غير متوقعة من الخادم. ليست JSON.");
+          throw new Error("استجابة غير صالحة من الخادم");
+        }
+      } catch (error) {
+        console.error("خطأ في تسجيل الدخول:", error);
+        throw error;
+      }
     },
     onSuccess: (user: User) => {
       queryClient.setQueryData(["/api/user"], user);
@@ -77,9 +112,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
     },
     onError: (error: Error) => {
+      console.error("خطأ في معالجة تسجيل الدخول:", error);
       toast({
         title: "فشل تسجيل الدخول",
-        description: error.message,
+        description: error.message || "حدث خطأ أثناء تسجيل الدخول",
         variant: "destructive",
       });
     },
@@ -87,8 +123,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const registerMutation = useMutation({
     mutationFn: async (userData: RegisterData) => {
-      const res = await apiRequest("POST", "/api/register", userData);
-      return await res.json();
+      try {
+        // استخدام fetch مباشرة مع معالجة أكثر تفصيلا للخطأ
+        const response = await fetch('/api/register', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(userData),
+          credentials: 'include',
+        });
+
+        if (!response.ok) {
+          // محاولة قراءة رسالة الخطأ
+          const contentType = response.headers.get('content-type');
+          if (contentType && contentType.includes('application/json')) {
+            const errorData = await response.json();
+            throw new Error(errorData.message || `فشل إنشاء الحساب: ${response.status}`);
+          } else {
+            // إذا كانت الاستجابة ليست JSON
+            const errorText = await response.text();
+            console.error("استجابة غير صالحة من الخادم:", errorText);
+            throw new Error(`فشل إنشاء الحساب: ${response.status}`);
+          }
+        }
+
+        // التحقق من نوع المحتوى قبل محاولة معالجة JSON
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+          return await response.json();
+        } else {
+          console.error("استجابة غير متوقعة من الخادم. ليست JSON.");
+          throw new Error("استجابة غير صالحة من الخادم");
+        }
+      } catch (error) {
+        console.error("خطأ في إنشاء الحساب:", error);
+        throw error;
+      }
     },
     onSuccess: (user: User) => {
       queryClient.setQueryData(["/api/user"], user);
@@ -98,9 +169,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
     },
     onError: (error: Error) => {
+      console.error("خطأ في معالجة إنشاء الحساب:", error);
       toast({
         title: "فشل إنشاء الحساب",
-        description: error.message,
+        description: error.message || "حدث خطأ أثناء إنشاء الحساب",
         variant: "destructive",
       });
     },
@@ -108,7 +180,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logoutMutation = useMutation({
     mutationFn: async () => {
-      await apiRequest("POST", "/api/logout");
+      try {
+        const response = await fetch('/api/logout', {
+          method: 'POST',
+          credentials: 'include',
+        });
+
+        if (!response.ok) {
+          throw new Error(`فشل تسجيل الخروج: ${response.status}`);
+        }
+      } catch (error) {
+        console.error("خطأ في تسجيل الخروج:", error);
+        throw error;
+      }
     },
     onSuccess: () => {
       queryClient.setQueryData(["/api/user"], null);
@@ -121,7 +205,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     onError: (error: Error) => {
       toast({
         title: "فشل تسجيل الخروج",
-        description: error.message,
+        description: error.message || "حدث خطأ أثناء تسجيل الخروج",
         variant: "destructive",
       });
     },
@@ -129,8 +213,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const updateProfileMutation = useMutation({
     mutationFn: async (profileData: ProfileData) => {
-      const res = await apiRequest("PUT", "/api/user/profile", profileData);
-      return await res.json();
+      try {
+        const response = await fetch('/api/user/profile', {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(profileData),
+          credentials: 'include',
+        });
+
+        if (!response.ok) {
+          const contentType = response.headers.get('content-type');
+          if (contentType && contentType.includes('application/json')) {
+            const errorData = await response.json();
+            throw new Error(errorData.message || `فشل تحديث الملف الشخصي: ${response.status}`);
+          } else {
+            const errorText = await response.text();
+            console.error("استجابة غير صالحة من الخادم:", errorText);
+            throw new Error(`فشل تحديث الملف الشخصي: ${response.status}`);
+          }
+        }
+
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+          return await response.json();
+        } else {
+          console.error("استجابة غير متوقعة من الخادم. ليست JSON.");
+          throw new Error("استجابة غير صالحة من الخادم");
+        }
+      } catch (error) {
+        console.error("خطأ في تحديث الملف الشخصي:", error);
+        throw error;
+      }
     },
     onSuccess: (updatedUser: User) => {
       queryClient.setQueryData(["/api/user"], updatedUser);
@@ -142,7 +257,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     onError: (error: Error) => {
       toast({
         title: "فشل تحديث الملف الشخصي",
-        description: error.message,
+        description: error.message || "حدث خطأ أثناء تحديث الملف الشخصي",
         variant: "destructive",
       });
     },
@@ -150,8 +265,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const changePasswordMutation = useMutation({
     mutationFn: async (passwordData: PasswordData) => {
-      const res = await apiRequest("POST", "/api/user/change-password", passwordData);
-      return await res.json();
+      try {
+        const response = await fetch('/api/user/change-password', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(passwordData),
+          credentials: 'include',
+        });
+
+        if (!response.ok) {
+          const contentType = response.headers.get('content-type');
+          if (contentType && contentType.includes('application/json')) {
+            const errorData = await response.json();
+            throw new Error(errorData.message || `فشل تغيير كلمة المرور: ${response.status}`);
+          } else {
+            const errorText = await response.text();
+            console.error("استجابة غير صالحة من الخادم:", errorText);
+            throw new Error(`فشل تغيير كلمة المرور: ${response.status}`);
+          }
+        }
+
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+          return await response.json();
+        } else {
+          console.error("استجابة غير متوقعة من الخادم. ليست JSON.");
+          throw new Error("استجابة غير صالحة من الخادم");
+        }
+      } catch (error) {
+        console.error("خطأ في تغيير كلمة المرور:", error);
+        throw error;
+      }
     },
     onSuccess: (data: { message: string }) => {
       toast({
@@ -162,7 +308,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     onError: (error: Error) => {
       toast({
         title: "فشل تغيير كلمة المرور",
-        description: error.message,
+        description: error.message || "حدث خطأ أثناء تغيير كلمة المرور",
         variant: "destructive",
       });
     },

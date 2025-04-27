@@ -7,58 +7,107 @@ async function throwIfResNotOk(res: Response) {
   }
 }
 
-export async function apiRequest(
-  urlOrOptions: string | { url: string; method?: string; body?: any },
+export async function apiRequest<T = any>(
+  urlOrMethod: string | 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH',
+  urlOrData?: string | any,
+  data?: any,
   options?: {
-    method?: string;
-    body?: any;
+    timeout?: number;
     on401?: UnauthorizedBehavior;
+    headers?: Record<string, string>;
+    signal?: AbortSignal;
   }
-): Promise<Response> {
+): Promise<T> {
   let url: string;
   let method: string = 'GET';
-  let data: any = undefined;
-  let on401: UnauthorizedBehavior | undefined = undefined;
+  let body: any = undefined;
+  let on401: UnauthorizedBehavior = options?.on401 || "throw";
+  let timeout = options?.timeout || 15000; // قيمة افتراضية 15 ثانية
 
-  // Handle different call patterns
-  if (typeof urlOrOptions === 'string') {
-    url = urlOrOptions;
-    method = options?.method || 'GET';
-    data = options?.body;
-    on401 = options?.on401;
+  // معالجة مختلف أنماط الاستدعاء
+  if (typeof urlOrMethod === 'string' && !['GET', 'POST', 'PUT', 'DELETE', 'PATCH'].includes(urlOrMethod)) {
+    // الحالة: apiRequest(url, data, options)
+    url = urlOrMethod;
+    body = urlOrData;
+  } else if (typeof urlOrMethod === 'string' && typeof urlOrData === 'string') {
+    // الحالة: apiRequest(method, url, data, options)
+    method = urlOrMethod;
+    url = urlOrData;
+    body = data;
   } else {
-    url = urlOrOptions.url;
-    method = urlOrOptions.method || 'GET';
-    data = urlOrOptions.body;
-    on401 = options?.on401;
-  }
-
-  const res = await fetch(url, {
-    method,
-    headers: data ? { "Content-Type": "application/json" } : {},
-    body: data ? JSON.stringify(data) : undefined,
-    credentials: "include",
-  });
-
-  if (res.status === 401 && on401) {
-    if (on401 === "returnNull") {
-      return res;
-    } else if (on401 === "redirect-to-login") {
-      window.location.href = "/auth";
-      return res;
+    // الحالة القديمة: apiRequest(url, { method, body }) - للتوافق مع الاستدعاءات السابقة
+    if (typeof urlOrMethod === 'string') {
+      url = urlOrMethod;
+      method = (urlOrData as any)?.method || 'GET';
+      body = (urlOrData as any)?.body;
+      // معالجة خيارات من النمط القديم
+      if ((urlOrData as any)?.on401) {
+        on401 = (urlOrData as any).on401;
+      }
+    } else {
+      throw new Error('طريقة استدعاء غير صحيحة لدالة apiRequest');
     }
   }
 
-  await throwIfResNotOk(res);
-  return res;
+  // إنشاء إشارة إلغاء للمهلة الزمنية
+  const controller = new AbortController();
+  const signal = options?.signal || controller.signal;
+  
+  // إعداد المهلة الزمنية
+  const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+  try {
+    const res = await fetch(url, {
+      method,
+      headers: {
+        ...(body ? { "Content-Type": "application/json" } : {}),
+        ...(options?.headers || {})
+      },
+      body: body ? JSON.stringify(body) : undefined,
+      credentials: "include",
+      signal
+    });
+
+    // إلغاء المهلة الزمنية بعد الانتهاء من الطلب
+    clearTimeout(timeoutId);
+
+    if (res.status === 401) {
+      if (on401 === "returnNull") {
+        return null as T;
+      } else if (on401 === "redirect-to-login") {
+        window.location.href = "/auth";
+        return null as T;
+      }
+    }
+
+    await throwIfResNotOk(res);
+    
+    const contentType = res.headers.get('content-type');
+    if (contentType && contentType.includes('application/json')) {
+      return await res.json() as T;
+    }
+    
+    return res as unknown as T;
+  } catch (error) {
+    // إلغاء المهلة الزمنية في حالة حدوث خطأ
+    clearTimeout(timeoutId);
+    
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw new Error('تم إلغاء الطلب بسبب تجاوز المهلة الزمنية');
+    }
+    
+    throw error;
+  }
 }
 
 type UnauthorizedBehavior = "returnNull" | "throw" | "redirect-to-login";
-export const getQueryFn: <T>(options: {
-  on401: UnauthorizedBehavior;
+
+export const getQueryFn: <T>(options?: {
+  on401?: UnauthorizedBehavior;
 }) => QueryFunction<T> =
-  ({ on401: unauthorizedBehavior }) =>
+  (options = { on401: "throw" }) =>
   async ({ queryKey }) => {
+    const unauthorizedBehavior = options?.on401 || "throw";
     const res = await fetch(queryKey[0] as string, {
       credentials: "include",
     });
