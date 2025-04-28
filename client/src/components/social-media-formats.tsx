@@ -21,13 +21,15 @@ interface SocialMediaFormatsProps {
   onFormatSelect: (format: string, formatData: SocialMediaFormat) => void;
   selectedFormat?: string;
   cardImageUrl?: string;
+  onGenerateImage?: () => void;
 }
 
 // Social Media Format Selection Component
 export const SocialMediaFormats: React.FC<SocialMediaFormatsProps> = ({
   onFormatSelect,
   selectedFormat,
-  cardImageUrl
+  cardImageUrl,
+  onGenerateImage
 }) => {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<string>(selectedFormat || 'instagram');
@@ -42,27 +44,28 @@ export const SocialMediaFormats: React.FC<SocialMediaFormatsProps> = ({
   // Definir un controlador para gestionar manualmente cuando llamar a onFormatSelect
   const handleTabChange = (tab: string) => {
     setActiveTab(tab);
-    
-    if (data?.formats && tab) {
-      const formatData = data.formats[tab];
+    // لا نقوم بتوليد الصورة تلقائيًا عند تغيير التبويب
+  };
+  
+  // إضافة وظيفة جديدة لتوليد الصورة عند النقر على زر "توليد"
+  const handleGenerateImage = () => {
+    if (data?.formats && activeTab) {
+      const formatData = data.formats[activeTab];
       if (formatData) {
-        onFormatSelect(tab, formatData);
+        onFormatSelect(activeTab, formatData);
       }
-    } else if (defaultFormats && tab) {
-      // Usar el formato predeterminado si no hay datos disponibles
-      const formatData = defaultFormats[tab as keyof typeof defaultFormats];
+    } else if (defaultFormats && activeTab) {
+      const formatData = defaultFormats[activeTab as keyof typeof defaultFormats];
       if (formatData) {
-        onFormatSelect(tab, formatData);
+        onFormatSelect(activeTab, formatData);
       }
     }
   };
   
-  // Efecto inicial para seleccionar el formato predeterminado solo al montar
+  // تحديد التنسيق الافتراضي فقط عند تحميل المكون
   useEffect(() => {
-    // Solo llamar a handleTabChange la primera vez cuando los datos están listos
-    if (data?.formats || defaultFormats) {
-      handleTabChange(activeTab);
-    }
+    // لا نقوم بتوليد الصورة تلقائيًا، بل ننتظر حتى ينقر المستخدم
+    setActiveTab(selectedFormat || 'instagram');
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data]);
   
@@ -147,6 +150,20 @@ export const SocialMediaFormats: React.FC<SocialMediaFormatsProps> = ({
                       {formats[formatKey].width} x {formats[formatKey].height} px 
                       ({formats[formatKey].ratio})
                     </div>
+                    
+                    <Button 
+                      className="mt-3 w-full"
+                      onClick={() => {
+                        // استخدم دالة التوليد من الأب إذا كانت متوفرة، وإلا استخدم الدالة المحلية
+                        if (onGenerateImage) {
+                          onGenerateImage();
+                        } else {
+                          handleGenerateImage();
+                        }
+                      }}
+                    >
+                      {t('share.generate')}
+                    </Button>
                   </div>
                 </div>
                 
@@ -173,7 +190,7 @@ export const SocialMediaFormats: React.FC<SocialMediaFormatsProps> = ({
                       className="mt-2"
                       onClick={() => window.open(cardImageUrl, '_blank')}
                     >
-                      {t('common.preview')}
+                      {t('share.preview')}
                     </Button>
                   </div>
                 )}

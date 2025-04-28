@@ -1,4 +1,2 @@
-export * from './TemplateEditor';
-export * from './EditorCanvas';
-export * from './FieldsPanel';
-export * from './PropertiesPanel';
+export { FieldsPositionEditor } from './FieldsPositionEditor';
+export { DraggableFieldsPreview } from './DraggableFieldsPreview';
