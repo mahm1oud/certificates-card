@@ -23,22 +23,81 @@ try {
  */
 export async function generateCertificateImage(template: Template, formData: any): Promise<string> {
   try {
-    // Load the template image
-    const templateImage = await loadImage(path.join(process.cwd(), template.imageUrl.replace(/^\//, '')));
+    console.log("Starting certificate image generation for template:", template.id, template.title);
     
-    // Set canvas dimensions based on the template image
-    const width = templateImage.width;
-    const height = templateImage.height;
+    // استخراج إعدادات القالب أو استخدام قيم افتراضية
+    const settings = template.settings as Record<string, any> || {};
+    
+    // استخراج الاتجاه من إعدادات القالب (أفقي أو عمودي)
+    const orientation = (settings.orientation as string) || 'portrait';
+    
+    // استخراج حجم الصورة المخصص أو الحفاظ على النسبة الأصلية
+    const useCustomSize = settings.useCustomSize === true;
+    const customWidth = useCustomSize ? parseInt(settings.customWidth as string) || 0 : 0;
+    const customHeight = useCustomSize ? parseInt(settings.customHeight as string) || 0 : 0;
+    
+    // Load the template image
+    const imageUrl = template.imageUrl.startsWith('http') 
+      ? template.imageUrl 
+      : path.join(process.cwd(), template.imageUrl.replace(/^\//, ''));
+    
+    console.log(`Loading template image from: ${imageUrl}`);
+    const templateImage = await loadImage(imageUrl);
+    
+    // Set canvas dimensions based on template settings
+    let width, height;
+    
+    // استخدام الأبعاد المخصصة إذا تم تحديدها وكانت صالحة
+    if (useCustomSize && customWidth > 0 && customHeight > 0) {
+      console.log(`Using custom dimensions from template settings: ${customWidth}x${customHeight}`);
+      width = customWidth;
+      height = customHeight;
+    } else if (orientation === 'landscape') {
+      // للشهادات الأفقية، استخدم أبعاد مناسبة أو اعكس الأبعاد الأصلية
+      if (templateImage.width > templateImage.height) {
+        // الصورة بالفعل أفقية
+        width = templateImage.width;
+        height = templateImage.height;
+      } else {
+        // الصورة عمودية، نحتاج لعكس النسبة
+        width = templateImage.height;
+        height = templateImage.width;
+      }
+    } else {
+      // للشهادات العمودية (الافتراضي)، استخدم الأبعاد الأصلية
+      width = templateImage.width;
+      height = templateImage.height;
+    }
+    
+    console.log(`Canvas dimensions set to: ${width}x${height}, orientation: ${orientation}`);
     
     // Create canvas and get context
     const canvas = createCanvas(width, height);
     const ctx = canvas.getContext('2d');
     
-    // Draw the template image
-    ctx.drawImage(templateImage, 0, 0, width, height);
-    
-    // Apply settings
-    const settings = template.settings || {};
+    // تطبيق إعدادات الصورة حسب التوجيه
+    if (orientation === 'landscape' && templateImage.width < templateImage.height) {
+      // إذا كانت الصورة عمودية ونريدها أفقية، نرسمها بعد تدويرها 90 درجة
+      ctx.save();
+      ctx.translate(width / 2, height / 2);
+      ctx.rotate(Math.PI / 2); // 90 درجة
+      const drawWidth = height;
+      const drawHeight = width;
+      ctx.drawImage(templateImage, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight);
+      ctx.restore();
+    } else if (orientation === 'portrait' && templateImage.width > templateImage.height) {
+      // إذا كانت الصورة أفقية ونريدها عمودية، نرسمها بعد تدويرها -90 درجة
+      ctx.save();
+      ctx.translate(width / 2, height / 2);
+      ctx.rotate(-Math.PI / 2); // -90 درجة
+      const drawWidth = height;
+      const drawHeight = width;
+      ctx.drawImage(templateImage, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight);
+      ctx.restore();
+    } else {
+      // لا حاجة للتدوير، ارسم الصورة كما هي
+      ctx.drawImage(templateImage, 0, 0, width, height);
+    }
     
     // Set default styles
     ctx.textAlign = 'center';

@@ -509,6 +509,114 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // تنزيل البطاقة بجودة محددة
+  app.post("/api/cards/:cardId/download", async (req, res) => {
+    try {
+      const { cardId } = req.params;
+      const { quality = 'medium' } = req.body;
+      
+      console.log(`Generating download image for card ${cardId} with quality: ${quality}`);
+      
+      if (isNaN(parseInt(cardId))) {
+        return res.status(400).json({ message: "معرف البطاقة غير صالح" });
+      }
+      
+      // Get the card
+      const card = await storage.getCard(parseInt(cardId));
+      
+      if (!card) {
+        return res.status(404).json({ message: "البطاقة غير موجودة" });
+      }
+      
+      // Get the template
+      const template = await storage.getTemplate(card.templateId);
+      
+      if (!template) {
+        return res.status(404).json({ message: "القالب غير موجود" });
+      }
+      
+      // الحصول على حقول القالب
+      let templateFields = [];
+      try {
+        templateFields = await storage.getTemplateFields(template.id);
+      } catch (error) {
+        console.error(`Error fetching template fields for template ${template.id}:`, error);
+      }
+      
+      // توليد صورة بالجودة المطلوبة باستخدام بيانات البطاقة
+      const imagePath = await generateCardImage(
+        { ...template, templateFields }, 
+        card.formData, 
+        quality
+      );
+      
+      // تحويل المسار النسبي إلى مسار كامل للـURL
+      const imageUrl = imagePath.replace(process.cwd(), '').split(path.sep).join('/');
+      
+      console.log(`Generated download image at: ${imageUrl} with quality: ${quality}`);
+      
+      res.json({ imageUrl });
+    } catch (error) {
+      console.error("Error generating card image for download:", error);
+      res.status(500).json({ message: "حدث خطأ أثناء توليد الصورة" });
+    }
+  });
+
+  // Update card status (draft, active, saved)
+  app.patch("/api/cards/:cardId", async (req, res) => {
+    try {
+      const { cardId } = req.params;
+      const { status, isPreview, quality } = req.body;
+      
+      console.log(`Updating card ${cardId} with status: ${status}, isPreview: ${isPreview}, quality: ${quality}`);
+      
+      if (isNaN(parseInt(cardId))) {
+        return res.status(400).json({ message: "معرف البطاقة غير صالح" });
+      }
+      
+      // Get the card to verify it exists
+      const card = await storage.getCard(parseInt(cardId));
+      
+      if (!card) {
+        console.log(`Card with ID ${cardId} not found`);
+        return res.status(404).json({ message: "البطاقة غير موجودة" });
+      }
+      
+      // Prepare update data
+      const updateData: any = {};
+      
+      // Add fields that need to be updated
+      if (status) {
+        updateData.status = status;
+      }
+      
+      if (isPreview !== undefined) {
+        // If card is no longer a preview and user is logged in, assign ownership
+        if (isPreview === false && req.isAuthenticated()) {
+          updateData.userId = req.user?.id;
+        }
+      }
+      
+      if (quality) {
+        updateData.quality = quality;
+      }
+      
+      // Update the card
+      const updatedCard = await storage.updateCard(parseInt(cardId), updateData);
+      
+      if (!updatedCard) {
+        return res.status(500).json({ message: "تعذر تحديث البطاقة" });
+      }
+      
+      console.log(`Card ${cardId} updated successfully:`, updateData);
+      
+      res.json(updatedCard);
+    } catch (error) {
+      console.error("Error updating card:", error);
+      res.status(500).json({ message: "حدث خطأ أثناء تحديث البطاقة" });
+    }
+  });
+
   // Create a new certificate (public)
   // API endpoint for generating certificates (used by certificate form)
   app.post("/api/certificates/generate", async (req, res) => {
@@ -1132,10 +1240,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
         const { id: fieldId, templateId, ...fieldData } = field;
         
         // إنشاء حقل جديد باستخدام البيانات من الحقل المصدر
-        const newField = await storage.createTemplateField({
-          ...fieldData,
+        // تحويل البيانات غير المعروفة إلى نسق JSON لتناسب الـ schema
+        const safeFieldData = {
+          name: fieldData.name,
+          label: fieldData.label,
+          labelAr: fieldData.labelAr,
+          type: fieldData.type || 'text',
+          required: Boolean(fieldData.required),
+          defaultValue: fieldData.defaultValue,
+          placeholder: fieldData.placeholder,
+          placeholderAr: fieldData.placeholderAr,
+          options: fieldData.options ? JSON.parse(JSON.stringify(fieldData.options)) : [],
+          position: fieldData.position ? JSON.parse(JSON.stringify(fieldData.position)) : {},
+          style: fieldData.style ? JSON.parse(JSON.stringify(fieldData.style)) : {},
+          displayOrder: fieldData.displayOrder || 0,
           templateId: targetTemplateId
-        });
+        };
+        
+        const newField = await storage.createTemplateField(safeFieldData);
         
         copiedFields.push(newField);
       }
@@ -1288,7 +1410,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put("/api/admin/template-fields/:id", isAdmin, async (req, res) => {
     try {
       const { id } = req.params;
-      const field = await storage.updateTemplateField(parseInt(id), req.body);
+      
+      // تجهيز البيانات المدخلة والتأكد من أنها تتوافق مع المخطط
+      const fieldData = {
+        name: req.body.name,
+        label: req.body.label,
+        labelAr: req.body.labelAr || null,
+        type: req.body.type || 'text',
+        required: Boolean(req.body.required),
+        defaultValue: req.body.defaultValue || null,
+        placeholder: req.body.placeholder || null,
+        placeholderAr: req.body.placeholderAr || null,
+        options: req.body.options ? JSON.parse(JSON.stringify(req.body.options)) : [],
+        position: req.body.position ? JSON.parse(JSON.stringify(req.body.position)) : {},
+        style: req.body.style ? JSON.parse(JSON.stringify(req.body.style)) : {},
+        displayOrder: req.body.displayOrder || 0,
+        templateId: req.body.templateId
+      };
+      
+      // تحديث حقل القالب
+      const field = await storage.updateTemplateField(parseInt(id), fieldData);
       
       if (!field) {
         return res.status(404).json({ message: "حقل القالب غير موجود" });
@@ -1658,11 +1799,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         const { id, ...fieldData } = field; // Remove id to create a new field
         
-        const newField = await storage.createTemplateField({
-          ...fieldData,
-          templateId: parseInt(targetTemplateId),
+        // تحويل البيانات لتلافي خطأ الأنواع
+        const createFieldData = {
+          name: fieldData.name,
+          label: fieldData.label,
+          labelAr: fieldData.labelAr || null,
+          type: fieldData.type || 'text',
+          required: Boolean(fieldData.required),
+          defaultValue: fieldData.defaultValue || null,
+          placeholder: fieldData.placeholder || null,
+          placeholderAr: fieldData.placeholderAr || null,
+          options: typeof fieldData.options === 'object' ? JSON.parse(JSON.stringify(fieldData.options)) : [],
+          position: typeof fieldData.position === 'object' ? JSON.parse(JSON.stringify(fieldData.position)) : {},
+          style: typeof fieldData.style === 'object' ? JSON.parse(JSON.stringify(fieldData.style)) : {},
           displayOrder: nextDisplayOrder + createdFields.length,
-        });
+          templateId: parseInt(targetTemplateId),
+        };
+        
+        const newField = await storage.createTemplateField(createFieldData);
         
         createdFields.push(newField);
       }
