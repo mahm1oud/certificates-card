@@ -12,8 +12,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
-import { Plus, Minus, Trash2, ChevronUp, ChevronDown, Loader2, Copy } from "lucide-react";
+import { Plus, Minus, Trash2, ChevronUp, ChevronDown, Loader2, Copy, Move, PanelLeft, Image as ImageIcon } from "lucide-react";
 import { CopyFieldsDialog } from "@/components/template-editor/CopyFieldsDialog";
+import { FieldsPositionEditor } from "@/components/template-editor/FieldsPositionEditor";
 
 type TextShadow = {
   enabled: boolean;
@@ -46,6 +47,12 @@ type TemplateField = {
     align?: string;
     verticalPosition?: string;
     textShadow?: TextShadow;
+    // خصائص للصور
+    imageMaxWidth?: number;
+    imageMaxHeight?: number;
+    imageBorder?: boolean;
+    imageRounded?: boolean;
+    layer?: number; // للتحكم في ترتيب الطبقات (z-index)
   };
   displayOrder: number;
 };
@@ -76,6 +83,7 @@ export default function TemplateFieldsPage() {
   const [fields, setFields] = useState<TemplateField[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [copyDialogOpen, setCopyDialogOpen] = useState(false);
+  const [positionEditorOpen, setPositionEditorOpen] = useState(false);
   const [editingField, setEditingField] = useState<number | null>(null);
   const [newOption, setNewOption] = useState("");
   
@@ -135,11 +143,24 @@ export default function TemplateFieldsPage() {
   // Mutation for creating a new field
   const createFieldMutation = useMutation({
     mutationFn: (data: any) => {
-      return apiRequest({
-        url: `/api/admin/template-fields/${templateId}`,
-        method: "POST",
-        body: data
-      });
+      // تحويل البيانات إلى نسق JSON قبل الإرسال للتأكد من توافقها مع المخطط
+      const processedData = {
+        name: data.name,
+        label: data.label,
+        labelAr: data.labelAr || null,
+        type: data.type || 'text',
+        required: Boolean(data.required),
+        defaultValue: data.defaultValue || null,
+        placeholder: data.placeholder || null,
+        placeholderAr: data.placeholderAr || null,
+        options: data.options ? JSON.parse(JSON.stringify(data.options)) : [],
+        position: data.position ? JSON.parse(JSON.stringify(data.position)) : {},
+        style: data.style ? JSON.parse(JSON.stringify(data.style)) : {},
+        displayOrder: data.displayOrder || 0,
+        templateId: parseInt(templateId)
+      };
+      
+      return apiRequest('POST', `/api/admin/template-fields`, processedData);
     },
     onSuccess: () => {
       toast({
@@ -161,11 +182,24 @@ export default function TemplateFieldsPage() {
   // Mutation for updating a field
   const updateFieldMutation = useMutation({
     mutationFn: (data: any) => {
-      return apiRequest({
-        url: `/api/admin/template-fields/${templateId}/${editingField}`,
-        method: "PUT",
-        body: data
-      });
+      // تحويل البيانات إلى نسق JSON قبل الإرسال للتأكد من توافقها مع المخطط
+      const processedData = {
+        name: data.name,
+        label: data.label,
+        labelAr: data.labelAr || null,
+        type: data.type || 'text',
+        required: Boolean(data.required),
+        defaultValue: data.defaultValue || null,
+        placeholder: data.placeholder || null,
+        placeholderAr: data.placeholderAr || null,
+        options: data.options ? JSON.parse(JSON.stringify(data.options)) : [],
+        position: data.position ? JSON.parse(JSON.stringify(data.position)) : {},
+        style: data.style ? JSON.parse(JSON.stringify(data.style)) : {},
+        displayOrder: data.displayOrder || 0,
+        templateId: parseInt(templateId)
+      };
+      
+      return apiRequest('PUT', `/api/admin/template-fields/${editingField}`, processedData);
     },
     onSuccess: () => {
       toast({
@@ -187,10 +221,7 @@ export default function TemplateFieldsPage() {
   // Mutation for deleting a field
   const deleteFieldMutation = useMutation({
     mutationFn: (fieldId: number) => {
-      return apiRequest({
-        url: `/api/admin/template-fields/${templateId}/${fieldId}`,
-        method: "DELETE"
-      });
+      return apiRequest('DELETE', `/api/admin/template-fields/${fieldId}`);
     },
     onSuccess: () => {
       toast({
@@ -247,7 +278,13 @@ export default function TemplateFieldsPage() {
           enabled: field.style?.textShadow?.enabled || false,
           color: field.style?.textShadow?.color || "#ffffff",
           blur: field.style?.textShadow?.blur || 5
-        }
+        },
+        // إعدادات الصور
+        imageMaxWidth: field.style?.imageMaxWidth || 300,
+        imageMaxHeight: field.style?.imageMaxHeight || 300,
+        imageBorder: field.style?.imageBorder || false,
+        imageRounded: field.style?.imageRounded || false,
+        layer: field.style?.layer || 1
       },
       displayOrder: field.displayOrder || 0
     });
@@ -289,7 +326,13 @@ export default function TemplateFieldsPage() {
           enabled: false,
           color: "#ffffff",
           blur: 5
-        }
+        },
+        // إعدادات افتراضية للصور
+        imageMaxWidth: 300,
+        imageMaxHeight: 300,
+        imageBorder: false,
+        imageRounded: false,
+        layer: 1
       },
       displayOrder: 0
     });
@@ -410,6 +453,14 @@ export default function TemplateFieldsPage() {
             <Copy className="h-4 w-4" />
             نسخ الحقول
           </Button>
+          <Button 
+            variant="outline" 
+            onClick={() => setPositionEditorOpen(true)}
+            className="flex items-center gap-2"
+          >
+            <Move className="h-4 w-4" />
+            تعديل مواضع الحقول
+          </Button>
           <Button onClick={handleAddField}>إضافة حقل جديد</Button>
         </div>
       </div>
@@ -475,25 +526,48 @@ export default function TemplateFieldsPage() {
                 
                 {/* Overlay field indicators */}
                 {fields.map((field) => (
-                  <div
-                    key={field.id}
-                    className="absolute border-2 border-dashed border-blue-500 rounded p-2 bg-blue-500/20"
-                    style={{
-                      top: `${field.position?.y || 50}%`,
-                      left: `${field.position?.x || 50}%`,
-                      transform: 'translate(-50%, -50%)',
-                      color: field.style?.color || 'black',
-                      fontFamily: field.style?.fontFamily || 'Cairo',
-                      fontSize: `${field.style?.fontSize || 16}px`,
-                      fontWeight: field.style?.fontWeight || 'normal',
-                      textAlign: (field.style?.align as any) || 'center',
-                      minWidth: '100px',
-                      minHeight: '30px',
-                      zIndex: 10
-                    }}
-                  >
-                    {field.label}
-                  </div>
+                  field.type === 'image' ? (
+                    <div
+                      key={field.id}
+                      className={`absolute border-2 border-dashed border-green-500 rounded p-2 bg-green-500/20 flex items-center justify-center ${field.style?.imageBorder ? 'ring-2 ring-gray-400' : ''} ${field.style?.imageRounded ? 'rounded-full' : 'rounded-sm'}`}
+                      style={{
+                        top: `${field.position?.y || 50}%`,
+                        left: `${field.position?.x || 50}%`,
+                        transform: 'translate(-50%, -50%)',
+                        width: `${field.style?.imageMaxWidth || 300}px`,
+                        height: `${field.style?.imageMaxHeight || 300}px`,
+                        maxWidth: '80%',
+                        maxHeight: '80%',
+                        zIndex: field.style?.layer || 1
+                      }}
+                    >
+                      <div className="flex flex-col items-center justify-center">
+                        <ImageIcon className="h-12 w-12 text-green-500/70" />
+                        <span className="text-sm font-medium mt-2">{field.label}</span>
+                        <span className="text-xs mt-1">{field.style?.imageMaxWidth}×{field.style?.imageMaxHeight}</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div
+                      key={field.id}
+                      className="absolute border-2 border-dashed border-blue-500 rounded p-2 bg-blue-500/20"
+                      style={{
+                        top: `${field.position?.y || 50}%`,
+                        left: `${field.position?.x || 50}%`,
+                        transform: 'translate(-50%, -50%)',
+                        color: field.style?.color || 'black',
+                        fontFamily: field.style?.fontFamily || 'Cairo',
+                        fontSize: `${field.style?.fontSize || 16}px`,
+                        fontWeight: field.style?.fontWeight || 'normal',
+                        textAlign: (field.style?.align as any) || 'center',
+                        minWidth: '100px',
+                        minHeight: '30px',
+                        zIndex: field.style?.layer || 10
+                      }}
+                    >
+                      {field.label}
+                    </div>
+                  )
                 ))}
               </div>
             ) : (
@@ -588,6 +662,7 @@ export default function TemplateFieldsPage() {
                         <SelectItem value="time">وقت</SelectItem>
                         <SelectItem value="select">قائمة منسدلة</SelectItem>
                         <SelectItem value="radio">خيارات متعددة</SelectItem>
+                        <SelectItem value="image">صورة</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -1137,6 +1212,136 @@ export default function TemplateFieldsPage() {
                         </div>
                       </div>
                       
+                      {/* قسم خصائص الصورة وإعدادات الطبقة - يظهر فقط عندما يكون نوع الحقل صورة */}
+                      {fieldFormData.type === "image" && (
+                        <div className="mt-6 border rounded-md p-4 bg-blue-50">
+                          <h3 className="text-lg font-medium mb-3 text-blue-700">خصائص الصورة</h3>
+                          
+                          <div className="grid md:grid-cols-2 gap-6">
+                            <div>
+                              <div className="grid gap-2">
+                                <Label htmlFor="imageMaxWidth">العرض الأقصى للصورة (بكسل)</Label>
+                                <div className="flex items-center gap-2">
+                                  <div className="flex-1">
+                                    <Slider
+                                      id="imageMaxWidth"
+                                      min={50}
+                                      max={500}
+                                      step={10}
+                                      value={[fieldFormData.style?.imageMaxWidth || 300]}
+                                      onValueChange={([value]) => handleStyleChange('imageMaxWidth', value)}
+                                    />
+                                  </div>
+                                  <Input
+                                    type="number"
+                                    min={50}
+                                    max={500}
+                                    className="w-20"
+                                    value={fieldFormData.style?.imageMaxWidth || 300}
+                                    onChange={(e) => handleStyleChange('imageMaxWidth', Number(e.target.value))}
+                                  />
+                                </div>
+                              </div>
+                              
+                              <div className="grid gap-2 mt-4">
+                                <Label htmlFor="imageMaxHeight">الارتفاع الأقصى للصورة (بكسل)</Label>
+                                <div className="flex items-center gap-2">
+                                  <div className="flex-1">
+                                    <Slider
+                                      id="imageMaxHeight"
+                                      min={50}
+                                      max={500}
+                                      step={10}
+                                      value={[fieldFormData.style?.imageMaxHeight || 300]}
+                                      onValueChange={([value]) => handleStyleChange('imageMaxHeight', value)}
+                                    />
+                                  </div>
+                                  <Input
+                                    type="number"
+                                    min={50}
+                                    max={500}
+                                    className="w-20"
+                                    value={fieldFormData.style?.imageMaxHeight || 300}
+                                    onChange={(e) => handleStyleChange('imageMaxHeight', Number(e.target.value))}
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                            
+                            <div>
+                              <div className="grid gap-4">
+                                <div className="flex items-center space-x-2 space-x-reverse">
+                                  <Checkbox 
+                                    id="imageBorder" 
+                                    checked={fieldFormData.style?.imageBorder || false}
+                                    onCheckedChange={(checked) => handleStyleChange('imageBorder', !!checked)}
+                                  />
+                                  <Label htmlFor="imageBorder" className="text-sm">إضافة إطار للصورة</Label>
+                                </div>
+                                
+                                <div className="flex items-center space-x-2 space-x-reverse">
+                                  <Checkbox 
+                                    id="imageRounded" 
+                                    checked={fieldFormData.style?.imageRounded || false}
+                                    onCheckedChange={(checked) => handleStyleChange('imageRounded', !!checked)}
+                                  />
+                                  <Label htmlFor="imageRounded" className="text-sm">جعل الصورة دائرية</Label>
+                                </div>
+                              </div>
+                              
+                              <div className="mt-4 border border-blue-200 bg-blue-100/50 p-3 rounded-md">
+                                <Label htmlFor="layer" className="block mb-2 text-blue-800">طبقة العنصر (Layer)</Label>
+                                <div className="flex items-center gap-2">
+                                  <div className="flex-1">
+                                    <Slider
+                                      id="layer"
+                                      min={1}
+                                      max={10}
+                                      step={1}
+                                      value={[fieldFormData.style?.layer || 1]}
+                                      onValueChange={([value]) => handleStyleChange('layer', value)}
+                                    />
+                                  </div>
+                                  <div className="bg-white rounded-md border px-2 py-1 w-12 text-center text-lg font-medium">
+                                    {fieldFormData.style?.layer || 1}
+                                  </div>
+                                </div>
+                                <p className="text-xs mt-2 text-blue-700">القيمة الأعلى تعني أن العنصر سيظهر في المقدمة فوق العناصر الأخرى.</p>
+                              </div>
+                            </div>
+                          </div>
+                          
+                          <div className="mt-4 bg-white p-3 rounded-md border">
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <span className="text-sm font-medium">معاينة حجم الصورة</span>
+                                <p className="text-xs text-muted-foreground mt-1">المساحة المتوقعة التي ستشغلها الصورة على القالب</p>
+                              </div>
+                              <div className="text-sm">
+                                {fieldFormData.style?.imageMaxWidth || 300} × {fieldFormData.style?.imageMaxHeight || 300} بكسل
+                              </div>
+                            </div>
+                            
+                            <div className="flex items-center justify-center mt-3">
+                              <div 
+                                className={`relative ${fieldFormData.style?.imageRounded ? 'rounded-full overflow-hidden' : 'rounded-md'}`}
+                                style={{
+                                  width: Math.min(200, fieldFormData.style?.imageMaxWidth || 300) + 'px',
+                                  height: Math.min(200, fieldFormData.style?.imageMaxHeight || 300) + 'px',
+                                  border: fieldFormData.style?.imageBorder ? '2px solid #64748b' : 'none',
+                                  background: '#f1f5f9',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center'
+                                }}
+                              >
+                                <ImageIcon className="text-gray-400" size={Math.min(60, fieldFormData.style?.imageMaxWidth || 300) / 2} />
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                      
                       <div>
                         <Label className="mb-2 block">معاينة التنسيق</Label>
                         
@@ -1200,7 +1405,109 @@ export default function TemplateFieldsPage() {
               </TabsContent>
               
               <TabsContent value="options" className="mt-2">
-                {(fieldFormData.type === 'select' || fieldFormData.type === 'radio') ? (
+                {fieldFormData.type === 'image' ? (
+                  <div className="space-y-4">
+                    <div className="rounded-md border p-4 bg-muted/30">
+                      <h3 className="text-md font-medium mb-2">إعدادات حقل الصورة</h3>
+                      
+                      <div className="space-y-4">
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="grid gap-2">
+                            <Label htmlFor="imageMaxWidth">الحد الأقصى للعرض (بكسل)</Label>
+                            <Input
+                              id="imageMaxWidth"
+                              type="number"
+                              min="0"
+                              value={fieldFormData.style?.imageMaxWidth || 300}
+                              onChange={(e) => setFieldFormData({
+                                ...fieldFormData,
+                                style: {
+                                  ...fieldFormData.style,
+                                  imageMaxWidth: parseInt(e.target.value) || 300
+                                }
+                              })}
+                            />
+                          </div>
+                          
+                          <div className="grid gap-2">
+                            <Label htmlFor="imageMaxHeight">الحد الأقصى للارتفاع (بكسل)</Label>
+                            <Input
+                              id="imageMaxHeight"
+                              type="number"
+                              min="0"
+                              value={fieldFormData.style?.imageMaxHeight || 300}
+                              onChange={(e) => setFieldFormData({
+                                ...fieldFormData,
+                                style: {
+                                  ...fieldFormData.style,
+                                  imageMaxHeight: parseInt(e.target.value) || 300
+                                }
+                              })}
+                            />
+                          </div>
+                        </div>
+                        
+                        <div className="grid gap-2">
+                          <Label>خصائص إضافية</Label>
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="flex items-center gap-2">
+                              <Checkbox
+                                id="imageBorder"
+                                checked={fieldFormData.style?.imageBorder || false}
+                                onCheckedChange={(checked) => setFieldFormData({
+                                  ...fieldFormData,
+                                  style: {
+                                    ...fieldFormData.style,
+                                    imageBorder: !!checked
+                                  }
+                                })}
+                              />
+                              <Label htmlFor="imageBorder">إطار للصورة</Label>
+                            </div>
+                            
+                            <div className="flex items-center gap-2">
+                              <Checkbox
+                                id="imageRounded"
+                                checked={fieldFormData.style?.imageRounded || false}
+                                onCheckedChange={(checked) => setFieldFormData({
+                                  ...fieldFormData,
+                                  style: {
+                                    ...fieldFormData.style,
+                                    imageRounded: !!checked
+                                  }
+                                })}
+                              />
+                              <Label htmlFor="imageRounded">حواف مستديرة</Label>
+                            </div>
+                          </div>
+                        </div>
+                        
+                        <div className="grid gap-2">
+                          <Label htmlFor="imageLayer">ترتيب الطبقة (z-index)</Label>
+                          <div className="flex items-center gap-2">
+                            <Input
+                              id="imageLayer"
+                              type="number"
+                              min="1"
+                              max="100"
+                              value={fieldFormData.style?.layer || 1}
+                              onChange={(e) => setFieldFormData({
+                                ...fieldFormData,
+                                style: {
+                                  ...fieldFormData.style,
+                                  layer: parseInt(e.target.value) || 1
+                                }
+                              })}
+                            />
+                            <div className="text-xs text-muted-foreground">
+                              الرقم الأكبر = طبقة أعلى
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : (fieldFormData.type === 'select' || fieldFormData.type === 'radio') ? (
                   <div className="space-y-4">
                     <div className="flex items-center justify-between">
                       <Label>الخيارات</Label>
@@ -1317,6 +1624,53 @@ export default function TemplateFieldsPage() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* مكون محرر مواضع الحقول باستخدام السحب والإفلات */}
+      <FieldsPositionEditor
+        isOpen={positionEditorOpen}
+        onClose={() => setPositionEditorOpen(false)}
+        template={template}
+        fields={fields}
+        onSave={(updatedFields) => {
+          // تحديث الحقول المحدثة للقالب
+          const updatePromises = updatedFields.map(field => {
+            // تم تحديث موضع الحقل بناءً على السحب والإفلات
+            // إرسال طلب تحديث لكل حقل تغير موضعه
+            return apiRequest('PUT', `/api/admin/template-fields/${field.id}`, {
+              name: field.name,
+              label: field.label,
+              labelAr: field.labelAr || null,
+              type: field.type || 'text',
+              required: Boolean(field.required),
+              defaultValue: field.defaultValue || null,
+              placeholder: field.placeholder || null,
+              placeholderAr: field.placeholderAr || null,
+              options: field.options ? JSON.parse(JSON.stringify(field.options)) : [],
+              position: field.position ? JSON.parse(JSON.stringify(field.position)) : {},
+              style: field.style ? JSON.parse(JSON.stringify(field.style)) : {},
+              displayOrder: field.displayOrder || 0,
+              templateId: parseInt(templateId)
+            });
+          });
+
+          // انتظار كل التحديثات ثم تحديث الواجهة
+          Promise.all(updatePromises)
+            .then(() => {
+              toast({
+                title: "تم تحديث مواضع الحقول بنجاح",
+                description: "تم ضبط مواقع الحقول على القالب"
+              });
+              refetchFields();
+            })
+            .catch(error => {
+              toast({
+                title: "حدث خطأ",
+                description: error.message || "حدث خطأ أثناء تحديث مواضع الحقول",
+                variant: "destructive"
+              });
+            });
+        }}
+      />
     </div>
   );
 }

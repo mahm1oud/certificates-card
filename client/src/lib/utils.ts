@@ -74,13 +74,23 @@ export function formatTime(date: Date | string | number): string {
 }
 
 // Download an image from a URL
-export function downloadImage(url: string, filename: string): void {
-  const a = document.createElement('a')
-  a.href = url
-  a.download = filename || 'image'
-  document.body.appendChild(a)
-  a.click()
-  document.body.removeChild(a)
+export function downloadImage(url: string, filename: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    try {
+      const a = document.createElement('a')
+      a.href = url
+      a.download = filename || 'image'
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      // تأخير قصير للتأكد من أن المتصفح أخذ وقته للاستجابة لنقرة التنزيل
+      setTimeout(() => {
+        resolve()
+      }, 100)
+    } catch (error) {
+      reject(error)
+    }
+  })
 }
 
 // Get category name based on ID or slug

@@ -247,7 +247,11 @@ const CardPreview = () => {
   // حفظ البطاقة في نماذجي
   const saveCardMutation = useMutation({
     mutationFn: async () => {
-      const response = await apiRequest('POST', `/api/cards/${card?.id}/save`, {});
+      // استخدام PATCH لتحديث حالة البطاقة إلى "حفظ"
+      const response = await apiRequest('PATCH', `/api/cards/${card?.id}`, {
+        status: 'saved',
+        isPreview: false
+      });
       return response;
     },
     onSuccess: () => {
@@ -256,11 +260,46 @@ const CardPreview = () => {
         description: "تم حفظ البطاقة في نماذجك بنجاح",
       });
       setIsSaveDialogOpen(false);
+      
+      // تحديث البيانات المخزنة مؤقتاً بعد الحفظ
+      queryClient.setQueryData<Card>([`/api/cards/${cardId}`], (oldData) => {
+        return oldData ? {
+          ...oldData,
+          status: 'saved'
+        } : oldData;
+      });
     },
     onError: (error) => {
       toast({
         title: "خطأ في الحفظ",
         description: error instanceof Error ? error.message : "حدث خطأ أثناء حفظ البطاقة",
+        variant: "destructive"
+      });
+    }
+  });
+  
+  // حفظ البطاقة كمسودة
+  const saveDraftMutation = useMutation({
+    mutationFn: async () => {
+      // استخدام PATCH لتحديث حالة البطاقة إلى "مسودة"
+      const response = await apiRequest('PATCH', `/api/cards/${card?.id}`, {
+        status: 'draft',
+        isPreview: false,
+        quality: 'preview' // استخدام جودة منخفضة للمسودات لتوفير مساحة التخزين
+      });
+      return response;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/user/cards'] });
+      toast({
+        title: "تم الحفظ كمسودة",
+        description: "تم حفظ البطاقة كمسودة ويمكنك تعديلها لاحقاً من صفحة نماذجي",
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "خطأ في الحفظ",
+        description: error instanceof Error ? error.message : "حدث خطأ أثناء حفظ المسودة",
         variant: "destructive"
       });
     }
@@ -292,15 +331,26 @@ const CardPreview = () => {
   // تنزيل البطاقة بجودة محددة
   const downloadCardMutation = useMutation({
     mutationFn: async (quality: 'low' | 'medium' | 'high' | 'download') => {
+      console.log(`Requesting download with quality: ${quality}`);
       const response = await apiRequest('POST', `/api/cards/${card?.id}/download`, {
         quality
       });
-      return response;
+      // تخزين الجودة المستخدمة في الاستجابة لاستخدامها في تسمية الملف
+      return { ...response, usedQuality: quality };
     },
     onSuccess: (data) => {
       if (data?.imageUrl) {
-        const fileName = `بطاقة-${card?.id || 'custom'}-${selectedQuality}.png`;
+        const fileName = `بطاقة-${card?.id || 'custom'}-${data.usedQuality || selectedQuality}.png`;
+        console.log(`Downloading image: ${data.imageUrl} with filename: ${fileName}`);
         downloadImage(data.imageUrl, fileName);
+        toast({
+          title: "تم التنزيل",
+          description: `تم تنزيل البطاقة بنجاح بجودة ${
+            data.usedQuality === 'low' ? 'منخفضة' : 
+            data.usedQuality === 'medium' ? 'متوسطة' : 
+            data.usedQuality === 'high' ? 'عالية' : 'ممتازة'
+          }`
+        });
       } else {
         handleFallbackDownload();
       }
@@ -338,8 +388,11 @@ const CardPreview = () => {
     }
   };
 
-  const isLoading = isLoadingCard || isLoadingFields || (previewUrl === null && !cardError);
+  // تغيير منطق التحميل ليظهر الواجهة بشكل أسرع مع إضافة مؤشر تحميل داخل المحتوى
+  const isLoading = isLoadingCard;
+  const isLoadingDetails = isLoadingFields || (previewUrl === null && !cardError);
 
+  // إظهار شاشة التحميل فقط إذا كانت البطاقة نفسها قيد التحميل
   if (isLoading) {
     return (
       <div className="fixed inset-0 bg-black/50 z-30 flex items-center justify-center">
@@ -363,9 +416,9 @@ const CardPreview = () => {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-30 flex items-center justify-center">
-      <div className="bg-white rounded-lg max-w-3xl w-full max-h-[90vh] overflow-auto mx-4">
-        <div className="p-4 border-b border-gray-200 flex justify-between items-center">
+    <div className="fixed inset-0 bg-black/60 z-30 flex items-center justify-center">
+      <div className="bg-white rounded-lg w-full h-[95vh] max-h-[95vh] overflow-hidden mx-2 flex flex-col">
+        <div className="p-3 border-b border-gray-200 flex justify-between items-center bg-gray-50">
           <h3 className="text-xl font-bold text-neutral-800">معاينة البطاقة</h3>
           <Button
             variant="ghost"
@@ -377,20 +430,27 @@ const CardPreview = () => {
           </Button>
         </div>
         
-        <div className="p-6">
-          <div className="bg-gray-100 rounded-lg p-4 flex justify-center">
-            <div className="relative w-full max-w-md overflow-hidden">
-              {previewUrl ? (
+        <div className="flex-1 overflow-auto p-3 md:p-4 flex flex-col">
+          <div className="flex-1 flex items-center justify-center bg-gray-100 rounded-lg p-2 md:p-4">
+            <div className="relative max-w-3xl h-full flex items-center justify-center">
+              {/* عرض مؤشر التحميل أثناء تحميل تفاصيل البطاقة أو الصورة */}
+              {isLoadingDetails ? (
+                <div className="rounded-md shadow-md bg-white flex items-center justify-center" style={{ aspectRatio: '3/4', minHeight: '300px' }}>
+                  <div className="text-center p-4">
+                    <Loader2 className="w-10 h-10 animate-spin mb-2 mx-auto text-primary" />
+                    <p className="text-sm text-gray-600">جاري تحميل الصورة...</p>
+                  </div>
+                </div>
+              ) : previewUrl ? (
                 <img 
                   src={previewUrl} 
                   alt={card.template?.title || "البطاقة المخصصة"} 
-                  className="w-full h-auto object-contain rounded-md shadow-md max-h-[80vh]"
-                  style={{ aspectRatio: '3/4' }}
+                  className="w-auto h-auto object-contain rounded-md shadow-md max-h-[calc(95vh-140px)] max-w-full"
                   loading="lazy"
                 />
               ) : (
                 // إذا لم تكن هناك صورة متاحة، استخدم Konva لتوليد واحدة
-                <div className="rounded-md shadow-md bg-white" style={{ aspectRatio: '3/4' }}>
+                <div className="rounded-md shadow-md bg-white flex items-center justify-center" style={{ maxHeight: 'calc(95vh-140px)' }}>
                   <KonvaImageGenerator
                     templateImage={card.template?.imageUrl || ''}
                     fields={templateFields}
@@ -399,13 +459,13 @@ const CardPreview = () => {
                     height={600}
                     onImageGenerated={handleImageGenerated}
                     onError={handleImageError}
-                    className="max-h-[80vh]"
+                    className="max-h-[calc(95vh-140px)] max-w-full"
                   />
                 </div>
               )}
               
-              {/* زر إعادة توليد الصورة */}
-              {!isRegenerating && !isLoadingImage && (
+              {/* زر إعادة توليد الصورة - عرضه فقط عندما تكون الصورة جاهزة وليست قيد التوليد */}
+              {!isRegenerating && !isLoadingImage && !isLoadingDetails && (
                 <Button
                   size="sm"
                   variant="secondary"
@@ -419,29 +479,35 @@ const CardPreview = () => {
             </div>
           </div>
           
-          <div className="flex flex-col gap-4 mt-8">
-            {/* أزرار الإجراءات الرئيسية */}
-            <div className="flex flex-wrap gap-4 justify-center">
-              <Button 
+        </div>
+        
+        {/* أزرار التحكم في شريط ثابت في الأسفل */}
+        <div className="border-t border-gray-200 p-3 bg-gray-50">
+          {/* كل الأزرار في صف واحد */}
+          <div className="flex flex-wrap gap-2 justify-between items-center">
+            <div className="flex gap-2">
+              <Button
                 variant="default"
                 onClick={handleViewFullCard}
-                className="flex items-center gap-2"
+                className="flex items-center gap-1"
+                disabled={!previewUrl && !card.imageUrl}
+                size="sm"
               >
                 <Eye className="h-4 w-4" />
-                عرض البطاقة
+                عرض
               </Button>
               
               {showQualitySelector ? (
-                <div className="flex items-center gap-2 bg-slate-100 p-2 rounded-md">
+                <div className="flex items-center gap-1">
                   <Select value={selectedQuality} onValueChange={(value: any) => setSelectedQuality(value)}>
-                    <SelectTrigger className="w-32">
+                    <SelectTrigger className="h-9 w-28">
                       <SelectValue placeholder="اختر الجودة" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="low">جودة منخفضة</SelectItem>
-                      <SelectItem value="medium">جودة متوسطة</SelectItem>
-                      <SelectItem value="high">جودة عالية</SelectItem>
-                      <SelectItem value="download">أقصى جودة</SelectItem>
+                      <SelectItem value="low">منخفضة</SelectItem>
+                      <SelectItem value="medium">متوسطة</SelectItem>
+                      <SelectItem value="high">عالية</SelectItem>
+                      <SelectItem value="download">ممتازة</SelectItem>
                     </SelectContent>
                   </Select>
                   
@@ -449,6 +515,7 @@ const CardPreview = () => {
                     variant="secondary" 
                     onClick={handleDownloadCard}
                     disabled={downloadCardMutation.isPending}
+                    size="sm"
                   >
                     {downloadCardMutation.isPending ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
@@ -462,54 +529,87 @@ const CardPreview = () => {
                 <Button
                   variant="secondary"
                   onClick={handleDownloadCard}
-                  className="flex items-center gap-2"
+                  className="flex items-center gap-1"
                   disabled={!previewUrl && !card.imageUrl}
+                  size="sm"
                 >
                   <Download className="h-4 w-4" />
-                  تحميل البطاقة
+                  تنزيل
                 </Button>
               )}
               
               <ShareOptions 
                 cardId={card.id || card.publicId} 
                 imageUrl={previewUrl || card.imageUrl} 
+                size="sm"
               />
             </div>
             
-            {/* أزرار الحفظ والحذف */}
-            <div className="flex flex-wrap gap-4 justify-center border-t border-gray-200 pt-4 mt-2">
+            <div className="flex gap-2">
+              {/* أزرار الحفظ والحذف */}
               <Dialog open={isSaveDialogOpen} onOpenChange={setIsSaveDialogOpen}>
                 <DialogTrigger asChild>
                   <Button 
                     variant="outline" 
-                    className="flex items-center gap-2"
+                    className="flex items-center gap-1"
+                    size="sm"
                   >
                     <Save className="h-4 w-4" />
-                    حفظ البطاقة
+                    حفظ
                   </Button>
                 </DialogTrigger>
                 <DialogContent>
                   <DialogHeader>
                     <DialogTitle>حفظ البطاقة</DialogTitle>
                     <DialogDescription>
-                      هل ترغب في حفظ هذه البطاقة في نماذجك للرجوع إليها لاحقاً؟
+                      يمكنك حفظ البطاقة في نماذجك للرجوع إليها لاحقاً أو حفظها كمسودة لتعديلها لاحقاً.
                     </DialogDescription>
                   </DialogHeader>
-                  <div className="flex justify-end gap-2 mt-4">
+                  <div className="flex flex-col space-y-4 mt-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <Button 
+                        variant="default"
+                        onClick={() => saveCardMutation.mutate()}
+                        disabled={saveCardMutation.isPending}
+                        className="w-full"
+                      >
+                        {saveCardMutation.isPending ? (
+                          <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        ) : (
+                          <Save className="h-4 w-4 mr-2" />
+                        )}
+                        حفظ البطاقة
+                      </Button>
+                      
+                      <Button 
+                        variant="outline"
+                        onClick={() => {
+                          saveDraftMutation.mutate();
+                          setIsSaveDialogOpen(false);
+                        }}
+                        disabled={saveDraftMutation.isPending}
+                        className="w-full"
+                      >
+                        {saveDraftMutation.isPending ? (
+                          <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        ) : (
+                          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 mr-2">
+                            <path d="M14 3c.3 0 .5.1.7.3L20 8.6c.2.2.3.4.3.7V18c0 .6-.2 1-.6 1.4-.4.4-.8.6-1.4.6H5.6c-.6 0-1-.2-1.4-.6-.4-.4-.6-.8-.6-1.4V5.6c0-.6.2-1 .6-1.4.4-.4.8-.6 1.4-.6H14z"/>
+                            <path d="M15 3v5c0 .6.2 1 .6 1.4.4.4.8.6 1.4.6h5"/>
+                            <path d="m9 15 3 3 3-3" />
+                            <path d="M12 9v9" />
+                          </svg>
+                        )}
+                        حفظ كمسودة
+                      </Button>
+                    </div>
+                    
                     <Button 
-                      variant="outline" 
+                      variant="ghost" 
                       onClick={() => setIsSaveDialogOpen(false)}
+                      className="w-full"
                     >
                       إلغاء
-                    </Button>
-                    <Button 
-                      onClick={() => saveCardMutation.mutate()}
-                      disabled={saveCardMutation.isPending}
-                    >
-                      {saveCardMutation.isPending ? (
-                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                      ) : null}
-                      حفظ البطاقة
                     </Button>
                   </div>
                 </DialogContent>
@@ -517,9 +617,10 @@ const CardPreview = () => {
               
               <Button 
                 variant="outline" 
-                className="flex items-center gap-2 text-red-500 border-red-200 hover:bg-red-50"
+                className="flex items-center gap-1 text-red-500 border-red-200 hover:bg-red-50"
                 onClick={() => deleteCardMutation.mutate()}
                 disabled={deleteCardMutation.isPending}
+                size="sm"
               >
                 {deleteCardMutation.isPending ? (
                   <Loader2 className="h-4 w-4 animate-spin" />

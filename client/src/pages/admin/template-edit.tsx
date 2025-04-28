@@ -64,7 +64,11 @@ export default function TemplateEditPage() {
       compressionLevel: 0,
       format: 'png',
       resolution: 300,
-      aspectRatio: '3:4'
+      aspectRatio: '3:4',
+      paperSize: 'custom', // أحجام الورق: A4, A3, A5, letter, custom
+      paperWidth: 0,
+      paperHeight: 0,
+      paperUnit: 'mm' // mm, cm, inch
     },
     active: true
   });
@@ -453,6 +457,7 @@ export default function TemplateEditPage() {
                     <TabsList className="w-full mb-4">
                       <TabsTrigger value="text">إعدادات النص</TabsTrigger>
                       <TabsTrigger value="image">إعدادات الصورة</TabsTrigger>
+                      <TabsTrigger value="paper">حجم الورق</TabsTrigger>
                     </TabsList>
                     
                     <TabsContent value="text" className="space-y-4">
@@ -703,6 +708,180 @@ export default function TemplateEditPage() {
                             <SelectItem value="9">ضغط عالي (حجم أصغر)</SelectItem>
                           </SelectContent>
                         </Select>
+                      </div>
+                    </TabsContent>
+                    
+                    <TabsContent value="paper" className="space-y-4">
+                      <div className="grid gap-2">
+                        <Label htmlFor="paperSize">حجم الورق</Label>
+                        <Select 
+                          value={formData.settings?.paperSize || 'custom'} 
+                          onValueChange={(value) => {
+                            // تعيين الأبعاد حسب حجم الورق المختار
+                            let paperWidth = 0;
+                            let paperHeight = 0;
+                            
+                            switch(value) {
+                              case 'A4':
+                                paperWidth = 210;
+                                paperHeight = 297;
+                                break;
+                              case 'A3':
+                                paperWidth = 297;
+                                paperHeight = 420;
+                                break;
+                              case 'A5':
+                                paperWidth = 148;
+                                paperHeight = 210;
+                                break;
+                              case 'letter':
+                                paperWidth = 216;
+                                paperHeight = 279;
+                                break;
+                              case 'legal':
+                                paperWidth = 216;
+                                paperHeight = 356;
+                                break;
+                              default:
+                                // أبقي الأبعاد المخصصة كما هي
+                                paperWidth = formData.settings?.paperWidth || 0;
+                                paperHeight = formData.settings?.paperHeight || 0;
+                            }
+                            
+                            setFormData(prev => ({
+                              ...prev,
+                              settings: {
+                                ...prev.settings,
+                                paperSize: value,
+                                paperWidth: paperWidth,
+                                paperHeight: paperHeight
+                              }
+                            }));
+                          }}
+                        >
+                          <SelectTrigger id="paperSize">
+                            <SelectValue placeholder="اختر حجم الورق" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="A4">A4 (210×297 مم)</SelectItem>
+                            <SelectItem value="A3">A3 (297×420 مم)</SelectItem>
+                            <SelectItem value="A5">A5 (148×210 مم)</SelectItem>
+                            <SelectItem value="letter">Letter (8.5×11 إنش)</SelectItem>
+                            <SelectItem value="legal">Legal (8.5×14 إنش)</SelectItem>
+                            <SelectItem value="custom">مخصص</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      
+                      {formData.settings?.paperSize === 'custom' && (
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="grid gap-2">
+                            <Label htmlFor="paperWidth">العرض</Label>
+                            <div className="flex items-center gap-2">
+                              <Input
+                                id="paperWidth"
+                                name="paperWidth"
+                                type="number"
+                                value={formData.settings?.paperWidth || 0}
+                                onChange={(e) => {
+                                  setFormData(prev => ({
+                                    ...prev,
+                                    settings: {
+                                      ...prev.settings,
+                                      paperWidth: parseFloat(e.target.value)
+                                    }
+                                  }));
+                                }}
+                                min="0"
+                                step="0.1"
+                              />
+                            </div>
+                          </div>
+                          
+                          <div className="grid gap-2">
+                            <Label htmlFor="paperHeight">الارتفاع</Label>
+                            <div className="flex items-center gap-2">
+                              <Input
+                                id="paperHeight"
+                                name="paperHeight"
+                                type="number"
+                                value={formData.settings?.paperHeight || 0}
+                                onChange={(e) => {
+                                  setFormData(prev => ({
+                                    ...prev,
+                                    settings: {
+                                      ...prev.settings,
+                                      paperHeight: parseFloat(e.target.value)
+                                    }
+                                  }));
+                                }}
+                                min="0"
+                                step="0.1"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                      
+                      <div className="grid gap-2">
+                        <Label htmlFor="paperUnit">وحدة القياس</Label>
+                        <Select 
+                          value={formData.settings?.paperUnit || 'mm'} 
+                          onValueChange={(value) => {
+                            let paperWidth = formData.settings?.paperWidth || 0;
+                            let paperHeight = formData.settings?.paperHeight || 0;
+                            
+                            // تحويل القيم حسب وحدة القياس الجديدة
+                            if (formData.settings?.paperUnit === 'mm' && value === 'cm') {
+                              paperWidth = paperWidth / 10;
+                              paperHeight = paperHeight / 10;
+                            } else if (formData.settings?.paperUnit === 'mm' && value === 'inch') {
+                              paperWidth = paperWidth / 25.4;
+                              paperHeight = paperHeight / 25.4;
+                            } else if (formData.settings?.paperUnit === 'cm' && value === 'mm') {
+                              paperWidth = paperWidth * 10;
+                              paperHeight = paperHeight * 10;
+                            } else if (formData.settings?.paperUnit === 'cm' && value === 'inch') {
+                              paperWidth = paperWidth / 2.54;
+                              paperHeight = paperHeight / 2.54;
+                            } else if (formData.settings?.paperUnit === 'inch' && value === 'mm') {
+                              paperWidth = paperWidth * 25.4;
+                              paperHeight = paperHeight * 25.4;
+                            } else if (formData.settings?.paperUnit === 'inch' && value === 'cm') {
+                              paperWidth = paperWidth * 2.54;
+                              paperHeight = paperHeight * 2.54;
+                            }
+                            
+                            setFormData(prev => ({
+                              ...prev,
+                              settings: {
+                                ...prev.settings,
+                                paperUnit: value,
+                                paperWidth: parseFloat(paperWidth.toFixed(2)),
+                                paperHeight: parseFloat(paperHeight.toFixed(2))
+                              }
+                            }));
+                          }}
+                        >
+                          <SelectTrigger id="paperUnit">
+                            <SelectValue placeholder="اختر وحدة القياس" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="mm">ملليمتر (mm)</SelectItem>
+                            <SelectItem value="cm">سنتيمتر (cm)</SelectItem>
+                            <SelectItem value="inch">إنش (inch)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      
+                      <div className="border-t pt-4">
+                        <p className="text-sm text-muted-foreground mb-2">معلومات مفيدة:</p>
+                        <ul className="text-sm text-muted-foreground list-disc list-inside space-y-1">
+                          <li>A4: الحجم الأكثر شيوعًا للمستندات والشهادات (210×297 مم)</li>
+                          <li>A3: مناسب للشهادات الكبيرة والملصقات (297×420 مم)</li>
+                          <li>Letter: شائع في أمريكا الشمالية (8.5×11 إنش)</li>
+                          <li>يمكنك ضبط الاتجاه (طولي/عرضي) في تبويب إعدادات الصورة</li>
+                        </ul>
                       </div>
                     </TabsContent>
                   </Tabs>

@@ -104,16 +104,20 @@ export default function FullCardView() {
   }, [card?.id]);
 
   // Handle download
-  const handleDownload = () => {
+  const handleDownload = async () => {
     if (!card) return;
     
     setIsDownloading(true);
-    downloadImage(
-      card.imageUrl,
-      `بطاقة_${card.template?.title || card.id}.png`
-    ).finally(() => {
+    try {
+      await downloadImage(
+        card.imageUrl,
+        `بطاقة_${card.template?.title || card.id}.png`
+      );
+    } catch (error) {
+      console.error("Error downloading image:", error);
+    } finally {
       setIsDownloading(false);
-    });
+    }
   };
 
   // Handle copy link

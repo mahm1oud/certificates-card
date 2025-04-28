@@ -58,27 +58,29 @@ const TemplateForm = () => {
       // إظهار إشعار بأننا نقوم بإنشاء البطاقة
       toast({
         title: "جاري الإنشاء...",
-        description: "يتم الآن إنشاء البطاقة، يرجى الانتظار",
+        description: "يتم الآن إنشاء صورة المعاينة، يرجى الانتظار",
       });
       
       try {
-        // إرسال الطلب مع زيادة وقت انتهاء الصلاحية (timeout) لمعالجة الإتصالات البطيئة
+        // إرسال الطلب مع إضافة خيار الجودة المنخفضة للمعاينة لتسريع العملية
         const response = await apiRequest(
-          'POST', // تحديد طريقة HTTP بوضوح
+          'POST',
           '/api/cards/generate', 
           {
             templateId,
             category,
-            formData
+            formData,
+            quality: 'preview', // إضافة خيار الجودة المنخفضة للمعاينة
+            isPreview: true // إضافة علامة تشير إلى أن هذه معاينة وليست حفظ نهائي
           }, 
           {
-            timeout: 30000, // 30 ثانية
+            timeout: 20000, // خفض وقت الانتظار إلى 20 ثانية
           }
         );
         
         // عند استخدام apiRequest المحسنة، النتيجة هي بالفعل JSON response
         const data = response;
-        console.log("Card created successfully:", data);
+        console.log("Card preview created successfully:", data);
         
         if (!data.cardId) {
           console.error("API response missing cardId:", data);
@@ -98,7 +100,7 @@ const TemplateForm = () => {
         console.error("API Error:", apiError);
         
         // معالجة أنواع الأخطاء المختلفة
-        let errorMessage = "حدث خطأ أثناء إنشاء البطاقة، يرجى المحاولة مرة أخرى";
+        let errorMessage = "حدث خطأ أثناء إنشاء المعاينة، يرجى المحاولة مرة أخرى";
         
         if (apiError.message?.includes("timeout") || apiError.name === "AbortError") {
           errorMessage = "استغرق الطلب وقتا طويلا. تحقق من اتصالك بالإنترنت وحاول مرة أخرى.";
