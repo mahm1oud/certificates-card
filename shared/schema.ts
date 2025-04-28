@@ -113,6 +113,7 @@ export const templateFields = pgTable("template_fields", {
   label: text("label").notNull(),
   labelAr: text("label_ar"), // Arabic label
   type: text("type").notNull().default("text"), // text, textarea, date, checkbox, radio, select, image
+  imageType: text("image_type"), // logo, signature - لتحديد نوع الصورة عندما يكون النوع image
   required: boolean("required").default(false).notNull(),
   defaultValue: text("default_value"),
   placeholder: text("placeholder"),
@@ -387,4 +388,139 @@ export const certificateBatchesRelations = relations(certificateBatches, ({ one,
 export const certificateBatchItemsRelations = relations(certificateBatchItems, ({ one }) => ({
   batch: one(certificateBatches, { fields: [certificateBatchItems.batchId], references: [certificateBatches.id] }),
   certificate: one(certificates, { fields: [certificateBatchItems.certificateId], references: [certificates.id] }),
+}));
+
+// أنشاء جدول طبقات العناصر - Layers
+export const layers = pgTable("layers", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  nameAr: text("name_ar"),
+  templateId: integer("template_id").notNull().references(() => templates.id, { onDelete: "cascade" }),
+  type: text("type").notNull().default("field"), // field, logo, image, signature, stamp
+  fieldName: text("field_name"), // اسم الحقل المرتبط (إذا كان النوع field)
+  imageUrl: text("image_url"), // مسار الصورة (للأنواع الأخرى)
+  zIndex: integer("z_index").default(0).notNull(), // ترتيب الطبقة (الأعلى = الأعلى)
+  position: json("position").default({}), // x, y, width, height (كنسبة مئوية)
+  isDefault: boolean("is_default").default(false).notNull(), // هل هو طبقة افتراضية
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertLayerSchema = createInsertSchema(layers).pick({
+  name: true,
+  nameAr: true,
+  templateId: true,
+  type: true,
+  fieldName: true,
+  imageUrl: true,
+  zIndex: true,
+  position: true,
+  isDefault: true,
+});
+
+export type InsertLayer = z.infer<typeof insertLayerSchema>;
+export type Layer = typeof layers.$inferSelect;
+
+// شعارات المستخدم - User Logos
+export const userLogos = pgTable("user_logos", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  imageUrl: text("image_url").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  isActive: boolean("is_active").default(true).notNull(),
+});
+
+export const insertUserLogoSchema = createInsertSchema(userLogos).pick({
+  userId: true,
+  name: true,
+  imageUrl: true,
+  isActive: true,
+});
+
+export type InsertUserLogo = z.infer<typeof insertUserLogoSchema>;
+export type UserLogo = typeof userLogos.$inferSelect;
+
+// توقيعات المستخدم - User Signatures
+export const userSignatures = pgTable("user_signatures", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  imageUrl: text("image_url").notNull(),
+  type: text("type").default("signature").notNull(), // signature, stamp
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  isActive: boolean("is_active").default(true).notNull(),
+});
+
+export const insertUserSignatureSchema = createInsertSchema(userSignatures).pick({
+  userId: true,
+  name: true,
+  imageUrl: true,
+  type: true,
+  isActive: true,
+});
+
+export type InsertUserSignature = z.infer<typeof insertUserSignatureSchema>;
+export type UserSignature = typeof userSignatures.$inferSelect;
+
+// شعارات القوالب - Template Logos
+export const templateLogos = pgTable("template_logos", {
+  id: serial("id").primaryKey(),
+  templateId: integer("template_id").notNull().references(() => templates.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  imageUrl: text("image_url").notNull(),
+  position: json("position").default({}), // x, y, width, height (كنسبة مئوية)
+  zIndex: integer("z_index").default(10).notNull(), // ترتيب الطبقة (الأعلى = الأعلى)
+  isRequired: boolean("is_required").default(false).notNull(), // هل هو إلزامي في القالب
+  displayOrder: integer("display_order").default(0).notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const insertTemplateLogoSchema = createInsertSchema(templateLogos).pick({
+  templateId: true,
+  name: true,
+  imageUrl: true,
+  position: true,
+  zIndex: true,
+  isRequired: true,
+  displayOrder: true,
+});
+
+export type InsertTemplateLogo = z.infer<typeof insertTemplateLogoSchema>;
+export type TemplateLogo = typeof templateLogos.$inferSelect;
+
+// العلاقات للجداول الجديدة
+export const layersRelations = relations(layers, ({ one }) => ({
+  template: one(templates, { fields: [layers.templateId], references: [templates.id] }),
+}));
+
+export const userLogosRelations = relations(userLogos, ({ one }) => ({
+  user: one(users, { fields: [userLogos.userId], references: [users.id] }),
+}));
+
+export const userSignaturesRelations = relations(userSignatures, ({ one }) => ({
+  user: one(users, { fields: [userSignatures.userId], references: [users.id] }),
+}));
+
+export const templateLogosRelations = relations(templateLogos, ({ one }) => ({
+  template: one(templates, { fields: [templateLogos.templateId], references: [templates.id] }),
+}));
+
+// تحديث العلاقات للمستخدمين والقوالب
+export const usersRelationsExtended = relations(users, ({ many }) => ({
+  logos: many(userLogos),
+  signatures: many(userSignatures),
+  cards: many(cards),
+  certificates: many(certificates),
+}));
+
+export const templatesRelationsExtended = relations(templates, ({ many }) => ({
+  layers: many(layers),
+  logos: many(templateLogos),
+  cards: many(cards),
+  templateFields: many(templateFields),
+  certificates: many(certificates),
 }));

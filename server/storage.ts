@@ -8,7 +8,12 @@ import {
   certificateBatches, type CertificateBatch, type InsertCertificateBatch,
   certificateBatchItems, type CertificateBatchItem, type InsertCertificateBatchItem,
   fonts, type Font, type InsertFont,
-  settings, type Setting, type InsertSetting
+  settings, type Setting, type InsertSetting,
+  // الكيانات الجديدة
+  layers, type Layer, type InsertLayer,
+  userLogos, type UserLogo, type InsertUserLogo,
+  userSignatures, type UserSignature, type InsertUserSignature,
+  templateLogos, type TemplateLogo, type InsertTemplateLogo
 } from "@shared/schema";
 
 import { db } from "./db";
@@ -128,6 +133,35 @@ export interface IStorage {
   getSettingsByCategory(category: string): Promise<Setting[]>;
   createOrUpdateSetting(setting: InsertSetting): Promise<Setting>;
   deleteSetting(key: string): Promise<boolean>;
+  
+  // Layers methods - طبقات العناصر
+  getLayers(templateId: number): Promise<Layer[]>;
+  getLayer(id: number): Promise<Layer | undefined>;
+  createLayer(layer: InsertLayer): Promise<Layer>;
+  updateLayer(id: number, data: Partial<InsertLayer>): Promise<Layer | undefined>;
+  deleteLayer(id: number): Promise<boolean>;
+  reorderLayers(templateId: number, layerIds: number[]): Promise<boolean>;
+  
+  // Template Logos methods - شعارات القوالب
+  getTemplateLogos(templateId: number): Promise<TemplateLogo[]>;
+  getTemplateLogo(id: number): Promise<TemplateLogo | undefined>;
+  createTemplateLogo(logo: InsertTemplateLogo): Promise<TemplateLogo>;
+  updateTemplateLogo(id: number, data: Partial<InsertTemplateLogo>): Promise<TemplateLogo | undefined>;
+  deleteTemplateLogo(id: number): Promise<boolean>;
+  
+  // User Logos methods - شعارات المستخدم
+  getUserLogos(userId: number): Promise<UserLogo[]>;
+  getUserLogo(id: number): Promise<UserLogo | undefined>;
+  createUserLogo(logo: InsertUserLogo): Promise<UserLogo>;
+  updateUserLogo(id: number, data: Partial<InsertUserLogo>): Promise<UserLogo | undefined>;
+  deleteUserLogo(id: number): Promise<boolean>;
+  
+  // User Signatures methods - توقيعات المستخدم
+  getUserSignatures(userId: number, type?: string): Promise<UserSignature[]>;
+  getUserSignature(id: number): Promise<UserSignature | undefined>;
+  createUserSignature(signature: InsertUserSignature): Promise<UserSignature>;
+  updateUserSignature(id: number, data: Partial<InsertUserSignature>): Promise<UserSignature | undefined>;
+  deleteUserSignature(id: number): Promise<boolean>;
 }
 
 // Database storage implementation
@@ -1143,6 +1177,280 @@ export class DatabaseStorage implements IStorage {
     } catch (error) {
       console.error("Error getting all certificates:", error);
       return { certificates: [], total: 0 };
+    }
+  }
+
+  // ========================
+  // طبقات العناصر - Layers
+  // ========================
+
+  async getLayers(templateId: number): Promise<Layer[]> {
+    try {
+      const layersList = await db.select().from(layers)
+        .where(eq(layers.templateId, templateId))
+        .orderBy(asc(layers.zIndex));
+      return layersList;
+    } catch (error) {
+      console.error("Error fetching layers:", error);
+      return [];
+    }
+  }
+
+  async getLayer(id: number): Promise<Layer | undefined> {
+    try {
+      const [layer] = await db.select().from(layers).where(eq(layers.id, id));
+      return layer;
+    } catch (error) {
+      console.error("Error fetching layer:", error);
+      return undefined;
+    }
+  }
+
+  async createLayer(layer: InsertLayer): Promise<Layer> {
+    try {
+      const [newLayer] = await db.insert(layers).values(layer).returning();
+      return newLayer;
+    } catch (error) {
+      console.error("Error creating layer:", error);
+      throw error;
+    }
+  }
+
+  async updateLayer(id: number, data: Partial<InsertLayer>): Promise<Layer | undefined> {
+    try {
+      const [updatedLayer] = await db.update(layers)
+        .set({
+          ...data,
+          updatedAt: new Date()
+        })
+        .where(eq(layers.id, id))
+        .returning();
+      return updatedLayer;
+    } catch (error) {
+      console.error("Error updating layer:", error);
+      return undefined;
+    }
+  }
+
+  async deleteLayer(id: number): Promise<boolean> {
+    try {
+      const result = await db.delete(layers).where(eq(layers.id, id));
+      return result.rowCount > 0;
+    } catch (error) {
+      console.error("Error deleting layer:", error);
+      return false;
+    }
+  }
+
+  async reorderLayers(templateId: number, layerIds: number[]): Promise<boolean> {
+    try {
+      // Transaction to reorder all layers
+      await db.transaction(async (tx) => {
+        for (let i = 0; i < layerIds.length; i++) {
+          await tx.update(layers)
+            .set({ zIndex: i })
+            .where(and(
+              eq(layers.id, layerIds[i]),
+              eq(layers.templateId, templateId)
+            ));
+        }
+      });
+      return true;
+    } catch (error) {
+      console.error("Error reordering layers:", error);
+      return false;
+    }
+  }
+
+  // ==============================
+  // شعارات القوالب - Template Logos
+  // ==============================
+
+  async getTemplateLogos(templateId: number): Promise<TemplateLogo[]> {
+    try {
+      const logosList = await db.select().from(templateLogos)
+        .where(eq(templateLogos.templateId, templateId))
+        .orderBy(asc(templateLogos.displayOrder));
+      return logosList;
+    } catch (error) {
+      console.error("Error fetching template logos:", error);
+      return [];
+    }
+  }
+
+  async getTemplateLogo(id: number): Promise<TemplateLogo | undefined> {
+    try {
+      const [logo] = await db.select().from(templateLogos).where(eq(templateLogos.id, id));
+      return logo;
+    } catch (error) {
+      console.error("Error fetching template logo:", error);
+      return undefined;
+    }
+  }
+
+  async createTemplateLogo(logo: InsertTemplateLogo): Promise<TemplateLogo> {
+    try {
+      const [newLogo] = await db.insert(templateLogos).values(logo).returning();
+      return newLogo;
+    } catch (error) {
+      console.error("Error creating template logo:", error);
+      throw error;
+    }
+  }
+
+  async updateTemplateLogo(id: number, data: Partial<InsertTemplateLogo>): Promise<TemplateLogo | undefined> {
+    try {
+      const [updatedLogo] = await db.update(templateLogos)
+        .set({
+          ...data,
+          updatedAt: new Date()
+        })
+        .where(eq(templateLogos.id, id))
+        .returning();
+      return updatedLogo;
+    } catch (error) {
+      console.error("Error updating template logo:", error);
+      return undefined;
+    }
+  }
+
+  async deleteTemplateLogo(id: number): Promise<boolean> {
+    try {
+      const result = await db.delete(templateLogos).where(eq(templateLogos.id, id));
+      return result.rowCount > 0;
+    } catch (error) {
+      console.error("Error deleting template logo:", error);
+      return false;
+    }
+  }
+
+  // ============================
+  // شعارات المستخدم - User Logos
+  // ============================
+
+  async getUserLogos(userId: number): Promise<UserLogo[]> {
+    try {
+      const logosList = await db.select().from(userLogos)
+        .where(eq(userLogos.userId, userId))
+        .orderBy(desc(userLogos.updatedAt));
+      return logosList;
+    } catch (error) {
+      console.error("Error fetching user logos:", error);
+      return [];
+    }
+  }
+
+  async getUserLogo(id: number): Promise<UserLogo | undefined> {
+    try {
+      const [logo] = await db.select().from(userLogos).where(eq(userLogos.id, id));
+      return logo;
+    } catch (error) {
+      console.error("Error fetching user logo:", error);
+      return undefined;
+    }
+  }
+
+  async createUserLogo(logo: InsertUserLogo): Promise<UserLogo> {
+    try {
+      const [newLogo] = await db.insert(userLogos).values(logo).returning();
+      return newLogo;
+    } catch (error) {
+      console.error("Error creating user logo:", error);
+      throw error;
+    }
+  }
+
+  async updateUserLogo(id: number, data: Partial<InsertUserLogo>): Promise<UserLogo | undefined> {
+    try {
+      const [updatedLogo] = await db.update(userLogos)
+        .set({
+          ...data,
+          updatedAt: new Date()
+        })
+        .where(eq(userLogos.id, id))
+        .returning();
+      return updatedLogo;
+    } catch (error) {
+      console.error("Error updating user logo:", error);
+      return undefined;
+    }
+  }
+
+  async deleteUserLogo(id: number): Promise<boolean> {
+    try {
+      const result = await db.delete(userLogos).where(eq(userLogos.id, id));
+      return result.rowCount > 0;
+    } catch (error) {
+      console.error("Error deleting user logo:", error);
+      return false;
+    }
+  }
+
+  // ====================================
+  // توقيعات المستخدم - User Signatures
+  // ====================================
+
+  async getUserSignatures(userId: number, type?: string): Promise<UserSignature[]> {
+    try {
+      let query = db.select().from(userSignatures)
+        .where(eq(userSignatures.userId, userId));
+      
+      if (type) {
+        query = query.where(eq(userSignatures.type, type));
+      }
+      
+      const signaturesList = await query.orderBy(desc(userSignatures.updatedAt));
+      return signaturesList;
+    } catch (error) {
+      console.error("Error fetching user signatures:", error);
+      return [];
+    }
+  }
+
+  async getUserSignature(id: number): Promise<UserSignature | undefined> {
+    try {
+      const [signature] = await db.select().from(userSignatures)
+        .where(eq(userSignatures.id, id));
+      return signature;
+    } catch (error) {
+      console.error("Error fetching user signature:", error);
+      return undefined;
+    }
+  }
+
+  async createUserSignature(signature: InsertUserSignature): Promise<UserSignature> {
+    try {
+      const [newSignature] = await db.insert(userSignatures).values(signature).returning();
+      return newSignature;
+    } catch (error) {
+      console.error("Error creating user signature:", error);
+      throw error;
+    }
+  }
+
+  async updateUserSignature(id: number, data: Partial<InsertUserSignature>): Promise<UserSignature | undefined> {
+    try {
+      const [updatedSignature] = await db.update(userSignatures)
+        .set({
+          ...data,
+          updatedAt: new Date()
+        })
+        .where(eq(userSignatures.id, id))
+        .returning();
+      return updatedSignature;
+    } catch (error) {
+      console.error("Error updating user signature:", error);
+      return undefined;
+    }
+  }
+
+  async deleteUserSignature(id: number): Promise<boolean> {
+    try {
+      const result = await db.delete(userSignatures).where(eq(userSignatures.id, id));
+      return result.rowCount > 0;
+    } catch (error) {
+      console.error("Error deleting user signature:", error);
+      return false;
     }
   }
 }

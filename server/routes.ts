@@ -6,6 +6,7 @@ import path from "path";
 import fs from "fs";
 import { setupAuth, isAuthenticated, isAdmin, comparePasswords, hashPassword } from "./auth";
 import { generateCertificateImage } from "./certificate-generator";
+import { generateOptimizedCertificateImage } from "./optimized-image-generator";
 import { processExcelBatch, generateVerificationCode } from "./batch-processor";
 import multer from "multer";
 import { randomUUID } from "crypto";
@@ -23,6 +24,9 @@ import adminSettingsRouter from './api/admin-settings';
 import authSettingsRouter from './api/auth-settings';
 import adminStatsRouter from './api/admin-stats';
 import cardsRouter from './api/cards';
+import layersRouter from './api/layers';
+import logosRouter from './api/logos';
+import signaturesRouter from './api/signatures';
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Setup directory structure
@@ -271,8 +275,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log(`Found category: ${category.name}`);
       console.log(`Generating card image with formData:`, formData);
       
-      // Generate the card image
-      const imagePath = await generateCardImage(template, formData);
+      // Generate the card image using optimized generator
+      let imagePath;
+      try {
+        // استخدام المولد المحسن الذي يدعم حقول الصور
+        console.log(`Using optimized card image generator`);
+        
+        // استخراج حقول القالب من قاعدة البيانات
+        const templateFields = await storage.getTemplateFields(template.id);
+        console.log(`Fetched ${templateFields.length} template fields for template ID ${template.id}`);
+        
+        // توليد الصورة باستخدام المولد المحسّن
+        imagePath = await import('./optimized-image-generator').then(({ generateOptimizedCardImage }) => {
+          return generateOptimizedCardImage({
+            templatePath: template.imageUrl,
+            fields: templateFields,
+            formData: formData,
+            quality: quality || 'high'
+          });
+        });
+        console.log(`Card image generated with optimized generator at: ${imagePath}`);
+      } catch (optimizedGeneratorError) {
+        console.error(`Error using optimized card generator:`, optimizedGeneratorError);
+        
+        // كخطة بديلة، استخدام المولد القديم
+        console.log(`Falling back to legacy card generator`);
+        imagePath = await generateCardImage(template, formData);
+        console.log(`Card image generated with legacy generator at: ${imagePath}`);
+      }
       console.log(`Card image generated at: ${imagePath}`);
       
       // Save the card to storage
@@ -300,10 +330,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   
   // API endpoint for generating cards (used by template form)
-  app.post("/api/cards/generate", async (req, res) => {
+  app.post("/api/cards/generate", upload.any(), async (req, res) => {
     try {
       console.log("Received card generation request:", req.body);
-      const { templateId, category, formData, quality = 'medium' } = req.body;
+      
+      // استخراج البيانات من طلب FormData أو JSON
+      const templateId = req.body.templateId;
+      const category = req.body.category;
+      let formData = req.body.formData;
+      const quality = req.body.quality || 'medium';
       
       // Validate required parameters
       if (!templateId) {
@@ -311,12 +346,56 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "معرف القالب مفقود" });
       }
       
-      if (!formData) {
+      // معالجة حالة تقديم النموذج باستخدام FormData
+      if (!formData && Object.keys(req.body).length > 0) {
+        // إذا كانت formData غير موجودة، قم بإنشاء كائن من البيانات المرسلة
+        formData = {};
+        
+        // ابحث عن جميع الحقول التي ليست templateId, category, quality
+        for (const key in req.body) {
+          if (key !== 'templateId' && key !== 'category' && key !== 'quality' && key !== 'isPreview') {
+            formData[key] = req.body[key];
+          }
+        }
+        
+        // معالجة الملفات المرفقة إذا كانت موجودة
+        if (req.files && Array.isArray(req.files)) {
+          console.log("Processing uploaded files:", req.files);
+          
+          for (const file of req.files as Express.Multer.File[]) {
+            const fieldName = file.fieldname;
+            
+            // نقل الملف من المجلد المؤقت إلى مجلد التحميلات
+            const targetPath = path.join(uploadsDir, file.filename);
+            try {
+              // التأكد من أن الملف موجود في المجلد المؤقت
+              if (!fs.existsSync(file.path)) {
+                console.error(`File not found at temp path: ${file.path}`);
+                continue;
+              }
+              
+              // نقل الملف من المجلد المؤقت إلى مجلد التحميلات
+              fs.copyFileSync(file.path, targetPath);
+              console.log(`File copied from ${file.path} to ${targetPath}`);
+              
+              // إضافة مسار الملف إلى بيانات النموذج
+              formData[fieldName] = `/uploads/${file.filename}`;
+              
+              console.log(`File processed: ${fieldName}, path: /uploads/${file.filename}`);
+            } catch (moveError) {
+              console.error(`Error processing file ${fieldName}:`, moveError);
+            }
+          }
+        }
+      }
+      
+      if (!formData || (typeof formData === 'object' && Object.keys(formData).length === 0)) {
         console.error("Missing formData in the request");
         return res.status(400).json({ message: "بيانات النموذج مفقودة" });
       }
       
       console.log(`Generating card for template ID: ${templateId}, category: ${category}`);
+      console.log(`Form data type: ${typeof formData} is array?`, Array.isArray(formData));
       
       try {
         // Get the template
@@ -333,7 +412,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
         
         console.log(`Found template: ${template.title}, image URL: ${template.imageUrl}`);
-        console.log(`Parsed form data:`, typeof formData, formData);
         
         // Parse form data if it's a string
         let parsedFormData = formData;
@@ -355,8 +433,40 @@ export async function registerRoutes(app: Express): Promise<Server> {
           
           let imagePath;
           try {
-            // إنشاء صورة البطاقة مع معالجة الأخطاء المحسنة ومع إعدادات الجودة
-            imagePath = await generateCardImage(template, parsedFormData, quality as 'preview' | 'download' | 'low' | 'medium' | 'high');
+            // إنشاء صورة البطاقة باستخدام المولد المحسن مع إعدادات الجودة
+            const templateFields = await storage.getTemplateFields(template.id);
+            console.log(`Fetched ${templateFields.length} template fields from database for template ID ${template.id}`);
+            console.log(`Applying custom field positions and styles for ${templateFields.length} fields`);
+            
+            try {
+              // استخراج إعدادات القالب إذا كانت متوفرة
+              let templateSettings = template.settings || {};
+              
+              // إعدادات افتراضية إذا لم تكن موجودة
+              const outputWidth = templateSettings.width ? parseInt(templateSettings.width) : 1200;
+              const outputHeight = templateSettings.height ? parseInt(templateSettings.height) : 1600;
+              const paperSize = templateSettings.paperSize || 'A4';
+              const orientation = templateSettings.orientation || 'portrait';
+              
+              console.log(`Applying template settings: width=${outputWidth}, height=${outputHeight}, paperSize=${paperSize}, orientation=${orientation}`);
+              
+              // استخدام المولد المحسن بدلاً من المولد القديم
+              imagePath = await import('./optimized-image-generator').then(({ generateOptimizedCardImage }) => {
+                return generateOptimizedCardImage({
+                  templatePath: template.imageUrl,
+                  fields: templateFields,
+                  formData: parsedFormData,
+                  quality: quality as 'preview' | 'download' | 'low' | 'medium' | 'high',
+                  outputWidth,
+                  outputHeight,
+                  outputFormat: 'png' // استخدام PNG للحفاظ على الشفافية وعدم ضغط الصورة
+                });
+              });
+            } catch (optimizerError) {
+              console.error("Error using optimized generator, falling back to standard:", optimizerError);
+              imagePath = await generateCardImage(template, parsedFormData, quality as 'preview' | 'download' | 'low' | 'medium' | 'high');
+            }
+            
             console.log(`Card image successfully generated at: ${imagePath} with quality: ${quality}`);
           } catch (cardImageError) {
             console.error("Error in card image generation:", cardImageError);
@@ -405,7 +515,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
             templateId: template.id,
             userId: req.isAuthenticated() ? req.user?.id : null,
             formData: parsedFormData,
-            imageUrl: `/uploads/${path.basename(imagePath)}`,
+            imageUrl: imagePath.includes('/generated/') 
+              ? `/uploads/generated/${path.basename(imagePath)}` 
+              : `/uploads/${path.basename(imagePath)}`,
             categoryId: template.categoryId,
             quality,
             publicId: randomUUID(),
@@ -543,15 +655,56 @@ export async function registerRoutes(app: Express): Promise<Server> {
         console.error(`Error fetching template fields for template ${template.id}:`, error);
       }
       
+      // استخراج إعدادات القالب إذا كانت متوفرة
+      let templateSettings = template.settings || {};
+      
+      // إعدادات افتراضية إذا لم تكن موجودة
+      const outputWidth = templateSettings.width ? parseInt(templateSettings.width) : 1200;
+      const outputHeight = templateSettings.height ? parseInt(templateSettings.height) : 1600;
+      const paperSize = templateSettings.paperSize || 'A4';
+      const orientation = templateSettings.orientation || 'portrait';
+      
+      console.log(`Applying template settings for download: width=${outputWidth}, height=${outputHeight}, paperSize=${paperSize}, orientation=${orientation}`);
+      
       // توليد صورة بالجودة المطلوبة باستخدام بيانات البطاقة
-      const imagePath = await generateCardImage(
-        { ...template, templateFields }, 
-        card.formData, 
-        quality
-      );
+      // توليد صورة بالجودة المطلوبة
+      let generatedImagePath = '';
+      
+      try {
+        // استخدام المولد المحسن أولاً
+        generatedImagePath = await import('./optimized-image-generator').then(({ generateOptimizedCardImage }) => {
+          return generateOptimizedCardImage({
+            templatePath: template.imageUrl,
+            fields: templateFields,
+            formData: card.formData,
+            quality: quality as 'download' | 'high',
+            outputWidth,
+            outputHeight,
+            outputFormat: 'png' // استخدام PNG للحفاظ على الشفافية وعدم ضغط الصورة
+          });
+        });
+      } catch (optimizerError) {
+        console.error("Error using optimized generator for download, falling back to standard:", optimizerError);
+        // استخدام المولد القديم كخيار احتياطي
+        generatedImagePath = await generateCardImage(
+          { ...template, templateFields }, 
+          card.formData, 
+          quality
+        );
+      }
+      
+      // تأكد من قيمة مسار الصورة المولدة
+      if (!generatedImagePath) {
+        throw new Error("Failed to generate image path");
+      }
       
       // تحويل المسار النسبي إلى مسار كامل للـURL
-      const imageUrl = imagePath.replace(process.cwd(), '').split(path.sep).join('/');
+      let imageUrl = generatedImagePath.replace(process.cwd(), '').split(path.sep).join('/');
+      
+      // التأكد من أن المسار يتضمن مجلد generated إذا كان المسار الأصلي يتضمنه
+      if (generatedImagePath.includes('/generated/') && !imageUrl.includes('/generated/')) {
+        imageUrl = imageUrl.replace('/uploads/', '/uploads/generated/');
+      }
       
       console.log(`Generated download image at: ${imageUrl} with quality: ${quality}`);
       
@@ -636,9 +789,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log(`Found template: ${template.title}`);
       console.log(`Generating certificate with formData:`, formData);
       
-      // Generate the certificate image
-      const imagePath = await generateCertificateImage(template, formData);
-      console.log(`Certificate image generated at: ${imagePath}`);
+      // Generate the certificate image using optimized generator
+      let imagePath;
+      try {
+        // استخدام المولد المحسن الذي يدعم حقول الصور
+        imagePath = await generateOptimizedCertificateImage(template, formData);
+        console.log(`Certificate image generated with optimized generator at: ${imagePath}`);
+      } catch (optimizedGeneratorError) {
+        console.error(`Error using optimized certificate generator:`, optimizedGeneratorError);
+        
+        // كخطة بديلة، استخدام المولد القديم
+        console.log(`Falling back to legacy certificate generator`);
+        imagePath = await generateCertificateImage(template, formData);
+        console.log(`Certificate image generated with legacy generator at: ${imagePath}`);
+      }
+      
+      console.log(`Final certificate image path: ${imagePath}`);
       
       // Extract values from formData
       const certificateType = formData.certificateType || template.certificateType || 'appreciation';
@@ -650,7 +816,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         templateId: template.id,
         userId: req.isAuthenticated() ? req.user?.id : undefined,
         formData,
-        imageUrl: `/uploads/${path.basename(imagePath)}`,
+        imageUrl: imagePath.includes('/generated/') 
+          ? `/uploads/generated/${path.basename(imagePath)}` 
+          : `/uploads/${path.basename(imagePath)}`,
         certificateType,
         title: formData.title || template.title,
         titleAr: formData.titleAr || template.titleAr,
@@ -684,15 +852,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "القالب غير موجود" });
       }
       
-      // Generate the certificate image
-      const imagePath = await generateCertificateImage(template, formData);
+      // Generate the certificate image using optimized generator
+      let imagePath;
+      try {
+        // استخدام المولد المحسن الذي يدعم حقول الصور
+        imagePath = await generateOptimizedCertificateImage(template, formData);
+        console.log(`Certificate image generated with optimized generator at: ${imagePath}`);
+      } catch (optimizedGeneratorError) {
+        console.error(`Error using optimized certificate generator:`, optimizedGeneratorError);
+        
+        // كخطة بديلة، استخدام المولد القديم
+        console.log(`Falling back to legacy certificate generator`);
+        imagePath = await generateCertificateImage(template, formData);
+        console.log(`Certificate image generated with legacy generator at: ${imagePath}`);
+      }
       
       // Save the certificate to storage
       const certificate = await storage.createCertificate({
         templateId: template.id,
         userId: req.isAuthenticated() ? req.user?.id : undefined,
         formData,
-        imageUrl: `/uploads/${path.basename(imagePath)}`,
+        imageUrl: imagePath.includes('/generated/') 
+          ? `/uploads/generated/${path.basename(imagePath)}` 
+          : `/uploads/${path.basename(imagePath)}`,
         certificateType: certificateType || 'appreciation',
         title: formData.title || template.title,
         titleAr: formData.titleAr || template.titleAr,
@@ -1972,6 +2154,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use('/api/admin/settings', adminSettingsRouter);
   app.use('/api/auth-settings', authSettingsRouter);
   app.use('/api/admin', adminStatsRouter);
+  
+  // تسجيل مسارات API للطبقات والشعارات والتوقيعات
+  app.use('/api/layers', layersRouter);
+  app.use('/api/logos', logosRouter);
+  app.use('/api/signatures', signaturesRouter);
 
   // Create HTTP server
   const httpServer = createServer(app);
