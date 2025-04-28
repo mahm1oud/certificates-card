@@ -36,6 +36,7 @@ const CertificateVerify = lazy(() => import("@/pages/certificate-verify"));
 const CertificateForm = lazy(() => import("@/pages/certificate-form"));
 const CertificatePreview = lazy(() => import("@/pages/certificate-preview"));
 const FullCertificateView = lazy(() => import("@/pages/full-certificate-view"));
+const TemplateEditor = lazy(() => import("@/pages/template-editor"));
 
 // Loading component for lazy loaded routes
 const LazyLoadingFallback = () => (
@@ -62,6 +63,7 @@ function Router() {
             <Route path="/certificates/:templateId" component={CertificateForm} />
             <Route path="/certificates/preview/:certificateId" component={CertificatePreview} />
             <Route path="/certificate/:certificateId" component={FullCertificateView} />
+            <Route path="/template-editor/:id" component={TemplateEditor} />
 
             {/* User routes (protected) */}
             <ProtectedRoute path="/user/dashboard" component={UserDashboard} />

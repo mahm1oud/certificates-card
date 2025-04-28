@@ -61,22 +61,58 @@ const TemplateForm = () => {
         description: "يتم الآن إنشاء صورة المعاينة، يرجى الانتظار",
       });
       
+      // تحقق مما إذا كان هناك بيانات صور في النموذج
+      const hasImageData = Object.entries(formData).some(([_, value]) => 
+        typeof value === 'string' && value.startsWith('data:image/')
+      );
+      
+      // اختيار طريقة الإرسال المناسبة بناءً على وجود بيانات صور
       try {
-        // إرسال الطلب مع إضافة خيار الجودة المنخفضة للمعاينة لتسريع العملية
-        const response = await apiRequest(
-          'POST',
-          '/api/cards/generate', 
-          {
-            templateId,
-            category,
-            formData,
-            quality: 'preview', // إضافة خيار الجودة المنخفضة للمعاينة
-            isPreview: true // إضافة علامة تشير إلى أن هذه معاينة وليست حفظ نهائي
-          }, 
-          {
-            timeout: 20000, // خفض وقت الانتظار إلى 20 ثانية
+        let response;
+        
+        if (hasImageData) {
+          // استخدم FormData للتعامل مع الصور
+          const formDataObj = new FormData();
+          formDataObj.append('templateId', templateId);
+          formDataObj.append('category', category);
+          formDataObj.append('quality', 'preview');
+          formDataObj.append('isPreview', 'true');
+          
+          // تحويل بيانات النموذج إلى FormData
+          // معالجة الحقول العادية والصور بشكل مختلف
+          for (const [key, value] of Object.entries(formData)) {
+            if (typeof value === 'string' && value.startsWith('data:image/')) {
+              // تحويل Data URL إلى Blob
+              const blob = await fetch(value).then(r => r.blob());
+              formDataObj.append(key, blob, `${key}.jpg`);
+            } else {
+              formDataObj.append(key, String(value));
+            }
           }
-        );
+          
+          // إرسال FormData مباشرة إلى الخادم
+          response = await fetch('/api/cards/generate', {
+            method: 'POST',
+            body: formDataObj,
+            // لا تضبط headers هنا لأن fetch سيقوم بضبطها تلقائيًا لـ FormData
+          }).then(res => res.json());
+        } else {
+          // استخدم JSON للنماذج العادية بدون صور
+          response = await apiRequest(
+            'POST',
+            '/api/cards/generate', 
+            {
+              templateId,
+              category,
+              formData,
+              quality: 'preview', // إضافة خيار الجودة المنخفضة للمعاينة
+              isPreview: true // إضافة علامة تشير إلى أن هذه معاينة وليست حفظ نهائي
+            }, 
+            {
+              timeout: 20000, // خفض وقت الانتظار إلى 20 ثانية
+            }
+          );
+        }
         
         // عند استخدام apiRequest المحسنة، النتيجة هي بالفعل JSON response
         const data = response;

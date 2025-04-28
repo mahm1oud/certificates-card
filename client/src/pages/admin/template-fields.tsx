@@ -29,6 +29,7 @@ type TemplateField = {
   label: string;
   labelAr?: string;
   type: string;
+  imageType?: string; // "logo" أو "signature" للشعارات والتواقيع
   required: boolean;
   defaultValue?: string;
   placeholder?: string;
@@ -93,6 +94,7 @@ export default function TemplateFieldsPage() {
     label: "",
     labelAr: "",
     type: "text",
+    imageType: "",
     required: false,
     defaultValue: "",
     placeholder: "",
@@ -149,6 +151,7 @@ export default function TemplateFieldsPage() {
         label: data.label,
         labelAr: data.labelAr || null,
         type: data.type || 'text',
+        imageType: data.imageType || null,
         required: Boolean(data.required),
         defaultValue: data.defaultValue || null,
         placeholder: data.placeholder || null,
@@ -157,7 +160,7 @@ export default function TemplateFieldsPage() {
         position: data.position ? JSON.parse(JSON.stringify(data.position)) : {},
         style: data.style ? JSON.parse(JSON.stringify(data.style)) : {},
         displayOrder: data.displayOrder || 0,
-        templateId: parseInt(templateId)
+        templateId: parseInt(templateId || "0")
       };
       
       return apiRequest('POST', `/api/admin/template-fields`, processedData);
@@ -188,6 +191,7 @@ export default function TemplateFieldsPage() {
         label: data.label,
         labelAr: data.labelAr || null,
         type: data.type || 'text',
+        imageType: data.imageType || null,
         required: Boolean(data.required),
         defaultValue: data.defaultValue || null,
         placeholder: data.placeholder || null,
@@ -196,7 +200,7 @@ export default function TemplateFieldsPage() {
         position: data.position ? JSON.parse(JSON.stringify(data.position)) : {},
         style: data.style ? JSON.parse(JSON.stringify(data.style)) : {},
         displayOrder: data.displayOrder || 0,
-        templateId: parseInt(templateId)
+        templateId: parseInt(templateId || "0")
       };
       
       return apiRequest('PUT', `/api/admin/template-fields/${editingField}`, processedData);
@@ -257,6 +261,7 @@ export default function TemplateFieldsPage() {
       label: field.label || "",
       labelAr: field.labelAr || "",
       type: field.type || "text",
+      imageType: field.imageType || "",
       required: field.required || false,
       defaultValue: field.defaultValue || "",
       placeholder: field.placeholder || "",
@@ -279,9 +284,9 @@ export default function TemplateFieldsPage() {
           color: field.style?.textShadow?.color || "#ffffff",
           blur: field.style?.textShadow?.blur || 5
         },
-        // إعدادات الصور
-        imageMaxWidth: field.style?.imageMaxWidth || 300,
-        imageMaxHeight: field.style?.imageMaxHeight || 300,
+        // إعدادات الصور - استخدام أبعاد تتناسب مع حجم القالب
+        imageMaxWidth: field.style?.imageMaxWidth || undefined, // سيتم حسابها بناءً على حجم القالب
+        imageMaxHeight: field.style?.imageMaxHeight || undefined, // سيتم حسابها بناءً على حجم القالب
         imageBorder: field.style?.imageBorder || false,
         imageRounded: field.style?.imageRounded || false,
         layer: field.style?.layer || 1
@@ -305,6 +310,7 @@ export default function TemplateFieldsPage() {
       label: "",
       labelAr: "",
       type: "text",
+      imageType: "regular",
       required: false,
       defaultValue: "",
       placeholder: "",
@@ -327,9 +333,9 @@ export default function TemplateFieldsPage() {
           color: "#ffffff",
           blur: 5
         },
-        // إعدادات افتراضية للصور
-        imageMaxWidth: 300,
-        imageMaxHeight: 300,
+        // إعدادات افتراضية للصور - سيتم حسابها ديناميكياً بناءً على حجم القالب
+        imageMaxWidth: undefined, // سيتم حسابها تلقائياً كربع عرض القالب
+        imageMaxHeight: undefined, // سيتم حسابها تلقائياً كربع ارتفاع القالب
         imageBorder: false,
         imageRounded: false,
         layer: 1
@@ -485,6 +491,7 @@ export default function TemplateFieldsPage() {
                     <div className="font-medium">{field.label}</div>
                     <div className="text-sm text-muted-foreground">
                       {field.name} - {field.type}
+                      {field.type === 'image' && field.imageType && ` (${field.imageType === 'logo' ? 'شعار' : field.imageType === 'signature' ? 'توقيع' : 'صورة'})`}
                       {field.required && " (إلزامي)"}
                     </div>
                   </div>
@@ -534,8 +541,9 @@ export default function TemplateFieldsPage() {
                         top: `${field.position?.y || 50}%`,
                         left: `${field.position?.x || 50}%`,
                         transform: 'translate(-50%, -50%)',
-                        width: `${field.style?.imageMaxWidth || 300}px`,
-                        height: `${field.style?.imageMaxHeight || 300}px`,
+                        // استخدام أبعاد نسبية للصورة استنادًا إلى حجم القالب
+                        width: `${field.style?.imageMaxWidth || '25%'}`,
+                        height: `${field.style?.imageMaxHeight || 'auto'}`,
                         maxWidth: '80%',
                         maxHeight: '80%',
                         zIndex: field.style?.layer || 1
@@ -666,6 +674,28 @@ export default function TemplateFieldsPage() {
                       </SelectContent>
                     </Select>
                   </div>
+                  
+                  {fieldFormData.type === 'image' && (
+                    <div className="grid gap-2">
+                      <Label htmlFor="imageType">نوع الصورة</Label>
+                      <Select 
+                        value={fieldFormData.imageType || 'regular'}
+                        onValueChange={(value) => setFieldFormData({ ...fieldFormData, imageType: value })}
+                      >
+                        <SelectTrigger id="imageType">
+                          <SelectValue placeholder="اختر نوع الصورة" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="regular">صورة عادية</SelectItem>
+                          <SelectItem value="logo">شعار</SelectItem>
+                          <SelectItem value="signature">توقيع</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">
+                        يساعد تحديد نوع الصورة في تحسين طريقة عرضها وإدارتها
+                      </p>
+                    </div>
+                  )}
                   
                   <div className="grid gap-2">
                     <Label htmlFor="defaultValue">القيمة الافتراضية</Label>

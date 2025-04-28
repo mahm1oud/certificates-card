@@ -124,19 +124,45 @@ const CardPreview = () => {
   // التحقق من الصورة وتوليدها إذا لزم الأمر
   useEffect(() => {
     if (card && card.imageUrl) {
+      console.log("Checking image URL:", card.imageUrl);
+      
+      // التحقق إذا كان المسار يحتوي على '/generated/' وإصلاحه إذا لزم الأمر
+      const correctedUrl = card.imageUrl.includes('/generated/') 
+        ? card.imageUrl 
+        : card.imageUrl.replace('/uploads/', '/uploads/generated/');
+      
+      console.log("Corrected URL to check:", correctedUrl);
+      
       // التحقق من صحة رابط الصورة
-      fetch(card.imageUrl, { method: 'HEAD' })
+      fetch(correctedUrl, { method: 'HEAD' })
         .then(response => {
           if (!response.ok) {
             console.log("Image URL not valid, will regenerate");
             setPreviewUrl(null);
           } else {
-            setPreviewUrl(card.imageUrl);
+            console.log("Image URL is valid:", correctedUrl);
+            setPreviewUrl(correctedUrl);
           }
         })
-        .catch(() => {
-          console.log("Error fetching image, will regenerate");
-          setPreviewUrl(null);
+        .catch((error) => {
+          console.log("Error fetching image:", error);
+          console.log("Will try original URL as fallback:", card.imageUrl);
+          
+          // محاولة أخرى باستخدام المسار الأصلي
+          fetch(card.imageUrl, { method: 'HEAD' })
+            .then(response => {
+              if (response.ok) {
+                console.log("Original URL is valid:", card.imageUrl);
+                setPreviewUrl(card.imageUrl);
+              } else {
+                console.log("Both URLs failed, will regenerate");
+                setPreviewUrl(null);
+              }
+            })
+            .catch(() => {
+              console.log("Both URLs failed with error, will regenerate");
+              setPreviewUrl(null);
+            });
         });
     } else {
       setPreviewUrl(null);

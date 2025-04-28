@@ -57,13 +57,14 @@ export async function apiRequest<T = any>(
   const timeoutId = setTimeout(() => controller.abort(), timeout);
 
   try {
+    // لا نقوم بإرسال body مع طلبات GET و HEAD
     const res = await fetch(url, {
       method,
       headers: {
-        ...(body ? { "Content-Type": "application/json" } : {}),
+        ...((body && method !== 'GET' && method !== 'HEAD') ? { "Content-Type": "application/json" } : {}),
         ...(options?.headers || {})
       },
-      body: body ? JSON.stringify(body) : undefined,
+      body: (body && method !== 'GET' && method !== 'HEAD') ? JSON.stringify(body) : undefined,
       credentials: "include",
       signal
     });
