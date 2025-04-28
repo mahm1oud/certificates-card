@@ -36,10 +36,105 @@ export const KonvaImageGenerator: React.FC<KonvaImageGeneratorProps> = ({
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<any>(null);
-  const [image, setImage] = useState<HTMLImageElement | null>(null);
+  const [backgroundImage, setBackgroundImage] = useState<HTMLImageElement | null>(null);
+  const [fieldImages, setFieldImages] = useState<Record<string, HTMLImageElement>>({});
   const [loading, setLoading] = useState(true);
+  const [loadingImages, setLoadingImages] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
+  
+  // تحويل مسار الصورة إلى مسار صحيح
+  const fixImagePath = (imagePath: string): string => {
+    if (!imagePath) return '';
+    
+    // إذا كان المسار بدأ بـ data: فهو صورة base64، نتركه كما هو
+    if (imagePath.startsWith('data:')) return imagePath;
+    
+    // إذا كان المسار بدأ بـ http أو https، نتركه كما هو
+    if (imagePath.startsWith('http')) return imagePath;
+    
+    // إذا كان المسار موجود في مجلد temp، نستبدله بـ uploads
+    if (imagePath.includes('/temp/')) {
+      imagePath = imagePath.replace('/temp/', '/uploads/');
+    }
+    
+    // إذا كان المسار في مجلد generated، نتأكد من أنه يظهر بشكل صحيح
+    if (imagePath.includes('/uploads/generated/')) {
+      // المسار صحيح بالفعل، لا نحتاج لتغييره
+    } else if (imagePath.includes('/generated/')) {
+      // إذا وجدنا /generated/ بدون /uploads/، نضيف /uploads/
+      imagePath = imagePath.replace('/generated/', '/uploads/generated/');
+    }
+    
+    // وأيضاً التحقق من استلام مسار نسبي بدون /
+    if (!imagePath.startsWith('/')) {
+      imagePath = '/' + imagePath;
+    }
+    
+    // إضافة origin للحصول على مسار كامل
+    return window.location.origin + imagePath;
+  };
+
+  // تحميل صور الحقول من نوع image
+  useEffect(() => {
+    const imageFields = fields.filter(field => field.type === 'image');
+    if (imageFields.length === 0) return;
+    
+    setLoadingImages(true);
+    console.log("Loading field images for:", imageFields.map(f => f.name));
+    
+    const images: Record<string, HTMLImageElement> = {};
+    let loadedCount = 0;
+    
+    imageFields.forEach(field => {
+      const fieldName = field.name;
+      if (!fieldName || !formData[fieldName]) {
+        loadedCount++;
+        if (loadedCount === imageFields.length) {
+          setFieldImages(images);
+          setLoadingImages(false);
+        }
+        return;
+      }
+      
+      // تصحيح مسار الصورة
+      let imageUrl = fixImagePath(formData[fieldName]);
+      
+      console.log(`Loading image for field "${fieldName}" from:`, imageUrl);
+      
+      const img = document.createElement('img');
+      img.crossOrigin = 'anonymous';
+      
+      img.onload = () => {
+        console.log(`Image for field "${fieldName}" loaded successfully`);
+        images[fieldName] = img;
+        loadedCount++;
+        
+        if (loadedCount === imageFields.length) {
+          setFieldImages(images);
+          setLoadingImages(false);
+        }
+      };
+      
+      img.onerror = (e) => {
+        console.error(`Error loading image for field "${fieldName}":`, e);
+        loadedCount++;
+        
+        if (loadedCount === imageFields.length) {
+          setFieldImages(images);
+          setLoadingImages(false);
+        }
+      };
+      
+      const cacheBuster = `?t=${Date.now()}`;
+      img.src = imageUrl + cacheBuster;
+    });
+    
+    // إذا كانت المصفوفة فارغة، نعتبر التحميل منتهي
+    if (imageFields.length === 0) {
+      setLoadingImages(false);
+    }
+  }, [fields, formData]);
 
   // Load template image
   useEffect(() => {
@@ -58,7 +153,7 @@ export const KonvaImageGenerator: React.FC<KonvaImageGeneratorProps> = ({
       }
       const blankImg = document.createElement('img');
       blankImg.onload = () => {
-        setImage(blankImg);
+        setBackgroundImage(blankImg);
         setError(null);
       };
       blankImg.src = canvas.toDataURL();
@@ -102,7 +197,7 @@ export const KonvaImageGenerator: React.FC<KonvaImageGeneratorProps> = ({
     
     img.onload = () => {
       console.log("Template image loaded successfully");
-      setImage(img);
+      setBackgroundImage(img);
       setLoading(false);
       
       // توليد الصورة تلقائيًا إذا لم تكن هناك حقول مطلوبة
@@ -135,7 +230,7 @@ export const KonvaImageGenerator: React.FC<KonvaImageGeneratorProps> = ({
       }
       const blankImg = document.createElement('img');
       blankImg.onload = () => {
-        setImage(blankImg);
+        setBackgroundImage(blankImg);
         setLoading(false);
       };
       blankImg.src = canvas.toDataURL();
@@ -149,9 +244,9 @@ export const KonvaImageGenerator: React.FC<KonvaImageGeneratorProps> = ({
 
   // Calculate image dimensions while maintaining aspect ratio
   const calculateDimensions = () => {
-    if (!image) return { width, height };
+    if (!backgroundImage) return { width, height };
     
-    const aspectRatio = image.width / image.height;
+    const aspectRatio = backgroundImage.width / backgroundImage.height;
     
     if (aspectRatio > 1) {
       // Landscape
@@ -225,9 +320,9 @@ export const KonvaImageGenerator: React.FC<KonvaImageGeneratorProps> = ({
                 canvas.height = height || 1200;
                 const ctx = canvas.getContext('2d');
                 
-                if (ctx && image) {
+                if (ctx && backgroundImage) {
                   // رسم الصورة الخلفية
-                  ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+                  ctx.drawImage(backgroundImage, 0, 0, canvas.width, canvas.height);
                   
                   // إعداد نمط النص
                   ctx.font = '20px Cairo';
@@ -236,13 +331,66 @@ export const KonvaImageGenerator: React.FC<KonvaImageGeneratorProps> = ({
                   
                   // رسم النصوص البسيطة للحقول
                   fields.forEach((field, index) => {
-                    const value = getFieldValue(field);
-                    const position = {
-                      x: (field.position?.x / 100) * canvas.width || 100,
-                      y: (field.position?.y / 100) * canvas.height || 100 + (index * 30)
-                    };
-                    
-                    ctx.fillText(value, position.x, position.y);
+                    // إذا كان نوع الحقل صورة، نرسم الصورة بدلاً من النص
+                    if (field.type === 'image') {
+                      const fieldName = field.name;
+                      const fieldImage = fieldImages[fieldName];
+                      if (fieldImage) {
+                        const position = {
+                          x: (field.position?.x / 100) * canvas.width || 100,
+                          y: (field.position?.y / 100) * canvas.height || 100 + (index * 50)
+                        };
+                        const style = field.style || {};
+                        // استخدام أبعاد نسبية للصورة بناءً على حجم القالب
+                        const maxWidth = style.imageMaxWidth || canvas.width / 4; // ربع عرض القالب
+                        const maxHeight = style.imageMaxHeight || canvas.height / 4; // ربع ارتفاع القالب
+                        
+                        // رسم الصورة مع الحفاظ على النسبة الأصلية
+                        const aspectRatio = fieldImage.width / fieldImage.height;
+                        let drawWidth, drawHeight;
+                        
+                        // الحفاظ على نسبة العرض إلى الارتفاع مع تطبيق الحد الأقصى للأبعاد
+                        if (aspectRatio > 1) {
+                          // الصورة عريضة (landscape)
+                          drawWidth = Math.min(maxWidth, fieldImage.width);
+                          drawHeight = drawWidth / aspectRatio;
+                          
+                          // تأكد من أن الارتفاع ليس أكبر من الحد الأقصى
+                          if (drawHeight > maxHeight) {
+                            drawHeight = maxHeight;
+                            drawWidth = drawHeight * aspectRatio;
+                          }
+                        } else {
+                          // الصورة طويلة (portrait)
+                          drawHeight = Math.min(maxHeight, fieldImage.height);
+                          drawWidth = drawHeight * aspectRatio;
+                          
+                          // تأكد من أن العرض ليس أكبر من الحد الأقصى
+                          if (drawWidth > maxWidth) {
+                            drawWidth = maxWidth;
+                            drawHeight = drawWidth / aspectRatio;
+                          }
+                        }
+                        
+                        // رسم الصورة في الموقع المحدد
+                        ctx.drawImage(
+                          fieldImage,
+                          position.x - (drawWidth / 2),
+                          position.y - (drawHeight / 2),
+                          drawWidth,
+                          drawHeight
+                        );
+                      }
+                    } else {
+                      // رسم النص إذا كان الحقل نصياً
+                      const value = getFieldValue(field);
+                      const position = {
+                        x: (field.position?.x / 100) * canvas.width || 100,
+                        y: (field.position?.y / 100) * canvas.height || 100 + (index * 30)
+                      };
+                      
+                      ctx.fillText(value, position.x, position.y);
+                    }
                   });
                   
                   // استخراج الصورة النهائية
@@ -431,7 +579,7 @@ export const KonvaImageGenerator: React.FC<KonvaImageGeneratorProps> = ({
                   const blankImg = document.createElement('img');
                   blankImg.src = canvas.toDataURL();
                   blankImg.onload = () => {
-                    setImage(blankImg);
+                    setBackgroundImage(blankImg);
                     setError(null);
                     setLoading(false);
                   };
@@ -458,9 +606,9 @@ export const KonvaImageGenerator: React.FC<KonvaImageGeneratorProps> = ({
       >
         <Layer>
           {/* Template Background Image */}
-          {image && (
+          {backgroundImage && (
             <Image
-              image={image}
+              image={backgroundImage}
               width={dimensions.width}
               height={dimensions.height}
               x={0}
@@ -469,7 +617,7 @@ export const KonvaImageGenerator: React.FC<KonvaImageGeneratorProps> = ({
           )}
 
           {/* Field Values */}
-          {!loading && !error && image && fields.map((field, index) => {
+          {!loading && !error && backgroundImage && fields.map((field, index) => {
             const position = getPosition(field, dimensions);
             const textStyles = getTextStyles(field);
             const value = getFieldValue(field);
@@ -533,6 +681,90 @@ export const KonvaImageGenerator: React.FC<KonvaImageGeneratorProps> = ({
                   {...textStyles}
                 />
               );
+            } else if (field.type === 'image') {
+              // معالجة حقول الصور
+              const fieldName = field.name;
+              const fieldImage = fieldImages[fieldName];
+
+              if (fieldImage) {
+                // حجم الصورة - استخدام أبعاد نسبية للصورة بناءً على حجم القالب
+                const style = field.style || {};
+                const maxWidth = style.imageMaxWidth || dimensions.width / 4; // ربع عرض القالب
+                const maxHeight = style.imageMaxHeight || dimensions.height / 4; // ربع ارتفاع القالب
+                
+                // حساب الأبعاد مع الحفاظ على نسبة العرض إلى الارتفاع
+                const aspectRatio = fieldImage.width / fieldImage.height;
+                let imgWidth, imgHeight;
+                
+                // الحفاظ على نسبة العرض إلى الارتفاع مع تطبيق الحد الأقصى للأبعاد
+                if (aspectRatio > 1) {
+                  // صورة أفقية (landscape)
+                  imgWidth = Math.min(maxWidth, fieldImage.width);
+                  imgHeight = imgWidth / aspectRatio;
+                  
+                  // تأكد من أن الارتفاع ليس أكبر من الحد الأقصى
+                  if (imgHeight > maxHeight) {
+                    imgHeight = maxHeight;
+                    imgWidth = imgHeight * aspectRatio;
+                  }
+                } else {
+                  // صورة رأسية (portrait)
+                  imgHeight = Math.min(maxHeight, fieldImage.height);
+                  imgWidth = imgHeight * aspectRatio;
+                  
+                  // تأكد من أن العرض ليس أكبر من الحد الأقصى
+                  if (imgWidth > maxWidth) {
+                    imgWidth = maxWidth;
+                    imgHeight = imgWidth / aspectRatio;
+                  }
+                }
+                
+                // الحدود المستديرة إذا كان مطلوباً
+                let clipFunc = undefined;
+                if (style.imageRounded) {
+                  clipFunc = (ctx: any) => {
+                    ctx.beginPath();
+                    ctx.arc(imgWidth / 2, imgHeight / 2, Math.min(imgWidth, imgHeight) / 2, 0, Math.PI * 2, false);
+                    ctx.closePath();
+                  };
+                }
+                
+                return (
+                  <React.Fragment key={`field-${index}-${field.id || index}`}>
+                    {/* إضافة ظل للصورة إذا كان مطلوباً */}
+                    {style.imageShadow?.enabled && (
+                      <Image
+                        image={fieldImage}
+                        x={position.x - (imgWidth / 2) + 3}
+                        y={position.y - (imgHeight / 2) + 3}
+                        width={imgWidth}
+                        height={imgHeight}
+                        shadowColor={style.imageShadow?.color || 'rgba(0,0,0,0.5)'}
+                        shadowBlur={style.imageShadow?.blur || 5}
+                        shadowOffset={{ x: 2, y: 2 }}
+                        shadowOpacity={0.5}
+                        opacity={0.5}
+                        listening={false}
+                        clipFunc={clipFunc}
+                      />
+                    )}
+                    
+                    {/* صورة المستخدم */}
+                    <Image
+                      image={fieldImage}
+                      x={position.x - (imgWidth / 2)}
+                      y={position.y - (imgHeight / 2)}
+                      width={imgWidth}
+                      height={imgHeight}
+                      clipFunc={clipFunc}
+                      stroke={style.imageBorder ? (style.imageBorderColor || '#000000') : undefined}
+                      strokeWidth={style.imageBorder ? (style.imageBorderWidth || 2) : 0}
+                    />
+                  </React.Fragment>
+                );
+              } else {
+                return null;
+              }
             } else {
               // أي نوع آخر من الحقول يتم التعامل معه كنص عادي
               return (

@@ -45,6 +45,42 @@ const CustomForm = ({ onChange, template }: CustomFormProps) => {
     const required = field.required || false;
     
     switch (fieldType) {
+      case "image":
+        return (
+          <div className="space-y-2">
+            <div className="flex items-center space-x-2 space-x-reverse">
+              <Input
+                id={field.name}
+                name={field.name}
+                type="file"
+                accept="image/*"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    // قراءة الملف كـ Data URL وتخزينه
+                    const reader = new FileReader();
+                    reader.onload = () => {
+                      updateFormField(field.name, reader.result as string);
+                    };
+                    reader.readAsDataURL(file);
+                  }
+                }}
+                required={required}
+                className="rtl"
+              />
+            </div>
+            {formData[field.name] && (
+              <div className="mt-2 rounded border p-2">
+                <img 
+                  src={formData[field.name]} 
+                  alt={field.label} 
+                  className="max-h-32 object-contain mx-auto" 
+                />
+              </div>
+            )}
+          </div>
+        );
+      
       case "text":
         return (
           <Input
@@ -162,6 +198,17 @@ const CustomForm = ({ onChange, template }: CustomFormProps) => {
   }
 
   function getDefaultFieldType(fieldName: string): string {
+    // التعرف على حقول الصور من خلال الاسم
+    if (fieldName.includes('image') || 
+        fieldName.includes('img') || 
+        fieldName.includes('logo') || 
+        fieldName.includes('photo') || 
+        fieldName.includes('picture') || 
+        fieldName.includes('صورة') || 
+        fieldName.includes('شعار')) {
+      return "image";
+    }
+    
     switch (fieldName) {
       case "message": return "textarea";
       case "date": return "date";
@@ -193,8 +240,8 @@ const CustomForm = ({ onChange, template }: CustomFormProps) => {
   // رسم الحقول الديناميكية بناء على التكوين
   return (
     <div className="space-y-4">
-      {fields.map((field: any) => (
-        <div key={field.name} className="form-group">
+      {fields.map((field: any, index: number) => (
+        <div key={`${field.name}-${index}`} className="form-group">
           <Label htmlFor={field.name} className="block text-sm font-medium mb-1">
             {field.label}
             {field.required && <span className="text-destructive mr-1">*</span>}

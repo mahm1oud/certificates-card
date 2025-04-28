@@ -6,7 +6,7 @@
 
 import { DraggableFieldsPreviewPro } from './DraggableFieldsPreviewPro';
 
-// تصدير محرر الحقول المحسن بنفس اسم المحرر القديم للحفاظ على التوافق
-export const DraggableFieldsPreview = DraggableFieldsPreviewPro;
+// تصدير المحرر المحسن تحت اسم المحرر الوسيط للحفاظ على التوافق
+export const DraggableFieldsPreviewEnhanced = DraggableFieldsPreviewPro;
 
 // ملاحظة: النسخة الأصلية القديمة من هذا الملف موجودة في مجلد legacy

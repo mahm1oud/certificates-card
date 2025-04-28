@@ -8,22 +8,13 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { DraggableFieldsPreview } from './DraggableFieldsPreview';
+import { DraggableFieldsPreviewPro } from './DraggableFieldsPreviewPro';
 import { 
   Grid, 
   Info, 
-  Square, 
   Ruler, 
-  Layout, 
   CheckSquare, 
-  ZoomIn, 
-  ZoomOut, 
-  Move, 
-  ToggleLeft, 
-  ToggleRight,
-  Layers,
-  ArrowUp,
-  ArrowDown
+  Move
 } from 'lucide-react';
 import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
@@ -44,7 +35,6 @@ export const FieldsPositionEditor: React.FC<FieldsPositionEditorProps> = ({
   onClose,
   onSave
 }) => {
-  const [selectedField, setSelectedField] = useState<any>(null);
   const [updatedFields, setUpdatedFields] = useState<any[]>([...fields]);
   
   // إعدادات الشبكة والتجاذب
@@ -57,51 +47,6 @@ export const FieldsPositionEditor: React.FC<FieldsPositionEditorProps> = ({
   useEffect(() => {
     setUpdatedFields([...fields]);
   }, [fields]);
-  
-  const handleFieldPositionChange = (fieldId: number, position: { x: number, y: number }, snapToGrid?: boolean) => {
-    // تحديث الحقل في القائمة المحلية
-    setUpdatedFields(prevFields => 
-      prevFields.map(field => 
-        field.id === fieldId 
-          ? { 
-              ...field, 
-              position: { 
-                ...field.position, 
-                x: position.x, 
-                y: position.y,
-                snapToGrid: snapToGrid !== undefined ? snapToGrid : field.position?.snapToGrid
-              } 
-            } 
-          : field
-      )
-    );
-  };
-  
-  // تغيير ترتيب طبقة الحقل المحدد
-  const handleChangeLayer = (direction: 'up' | 'down') => {
-    if (!selectedField) return;
-    
-    setUpdatedFields(prevFields => 
-      prevFields.map(field => {
-        if (field.id === selectedField.id) {
-          const currentLayer = field.style?.layer || 1;
-          // زيادة أو خفض العمق، لا يمكن أن يكون أقل من 1
-          const newLayer = direction === 'up' 
-            ? currentLayer + 1 
-            : Math.max(1, currentLayer - 1);
-          
-          return { 
-            ...field, 
-            style: { 
-              ...field.style, 
-              layer: newLayer 
-            } 
-          };
-        }
-        return field;
-      })
-    );
-  };
   
   // معالجة حفظ التغييرات
   const handleSaveChanges = () => {
@@ -146,12 +91,10 @@ export const FieldsPositionEditor: React.FC<FieldsPositionEditorProps> = ({
           
           <div className="h-[calc(100%-6rem)] overflow-auto">
             {template && (
-              <DraggableFieldsPreview
+              <DraggableFieldsPreviewPro
                 templateImage={template.imageUrl || ''}
                 fields={updatedFields}
-                selectedField={selectedField}
-                onFieldPositionChange={handleFieldPositionChange}
-                onSelectField={setSelectedField}
+                onFieldsChange={setUpdatedFields}
                 className="border-gray-200"
                 editorSettings={updateEditorSettings}
               />
@@ -207,52 +150,6 @@ export const FieldsPositionEditor: React.FC<FieldsPositionEditorProps> = ({
             </div>
           </div>
         </div>
-        
-        {/* لوحة التحكم بالطبقات - تظهر فقط عند اختيار حقل */}
-        {selectedField && (
-          <div className="mt-2 p-2 bg-blue-50 rounded-md flex flex-wrap items-center gap-4 rtl:space-x-reverse">
-            <div className="flex items-center gap-2">
-              <Layers className="w-4 h-4 ml-1 text-blue-500" />
-              <span className="text-sm font-semibold text-blue-700">التحكم بطبقات العناصر</span>
-            </div>
-            
-            <div className="flex items-center gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                className="flex items-center gap-1 text-xs"
-                onClick={() => handleChangeLayer('up')}
-              >
-                <ArrowUp className="w-3.5 h-3.5" />
-                <span>رفع للأمام</span>
-              </Button>
-              
-              <Button
-                size="sm"
-                variant="outline"
-                className="flex items-center gap-1 text-xs"
-                onClick={() => handleChangeLayer('down')}
-              >
-                <ArrowDown className="w-3.5 h-3.5" />
-                <span>إرجاع للخلف</span>
-              </Button>
-              
-              <div className="py-1 px-2 bg-white rounded border text-xs flex items-center">
-                <span className="text-gray-500 ml-1">طبقة:</span>
-                <span className="font-mono">{selectedField.style?.layer || 1}</span>
-              </div>
-              
-              <div className="py-1 px-2 bg-white rounded border text-xs">
-                <span className="text-gray-500 ml-1">الحقل:</span>
-                <span className="font-semibold">{selectedField.label || selectedField.name}</span>
-              </div>
-            </div>
-            
-            <div className="text-xs text-gray-500 mr-auto">
-              <span>العناصر ذات الرقم الأعلى تظهر في المقدمة</span>
-            </div>
-          </div>
-        )}
         
         <DialogFooter className="mt-2 flex flex-wrap items-center justify-between">
           <div className="flex items-center gap-2">

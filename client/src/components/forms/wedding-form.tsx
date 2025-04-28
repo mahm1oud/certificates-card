@@ -16,7 +16,10 @@ const WeddingForm = ({ onChange, template }: WeddingFormProps) => {
     weddingDate: '',
     weddingTime: '',
     weddingLocation: '',
-    additionalNotes: ''
+    additionalNotes: '',
+    coupleImage: '', // صورة العروسين
+    familyImage: '', // صورة العائلة أو إطار تزييني
+    venueImage: ''   // صورة مكان الحفل
   });
 
   useEffect(() => {
@@ -113,6 +116,106 @@ const WeddingForm = ({ onChange, template }: WeddingFormProps) => {
           className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary focus:border-primary"
           placeholder="أي ملاحظات إضافية ترغب في إضافتها"
         />
+      </div>
+      
+      {/* حقل صورة العروسين */}
+      <div className="form-group">
+        <Label htmlFor="couple-image" className="block text-sm font-medium text-neutral-700 mb-1">
+          صورة العروسين
+        </Label>
+        <Input
+          id="couple-image"
+          name="coupleImage"
+          type="file"
+          accept="image/*"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) {
+              // قراءة الملف كـ Data URL وتخزينه
+              const reader = new FileReader();
+              reader.onload = () => {
+                updateFormField('coupleImage', reader.result as string);
+              };
+              reader.readAsDataURL(file);
+            }
+          }}
+          className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary focus:border-primary"
+        />
+        {formData.coupleImage && (
+          <div className="mt-2 rounded border p-2">
+            <img 
+              src={formData.coupleImage} 
+              alt="صورة العروسين" 
+              className="max-h-32 object-contain mx-auto" 
+            />
+          </div>
+        )}
+      </div>
+      
+      {/* حقل صورة العائلة */}
+      <div className="form-group">
+        <Label htmlFor="family-image" className="block text-sm font-medium text-neutral-700 mb-1">
+          صورة العائلة/إطار تزييني
+        </Label>
+        <Input
+          id="family-image"
+          name="familyImage"
+          type="file"
+          accept="image/*"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) {
+              const reader = new FileReader();
+              reader.onload = () => {
+                updateFormField('familyImage', reader.result as string);
+              };
+              reader.readAsDataURL(file);
+            }
+          }}
+          className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary focus:border-primary"
+        />
+        {formData.familyImage && (
+          <div className="mt-2 rounded border p-2">
+            <img 
+              src={formData.familyImage} 
+              alt="صورة العائلة/إطار تزييني" 
+              className="max-h-32 object-contain mx-auto" 
+            />
+          </div>
+        )}
+      </div>
+      
+      {/* حقل صورة مكان الحفل */}
+      <div className="form-group">
+        <Label htmlFor="venue-image" className="block text-sm font-medium text-neutral-700 mb-1">
+          صورة مكان الحفل
+        </Label>
+        <Input
+          id="venue-image"
+          name="venueImage"
+          type="file"
+          accept="image/*"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) {
+              const reader = new FileReader();
+              reader.onload = () => {
+                updateFormField('venueImage', reader.result as string);
+              };
+              reader.readAsDataURL(file);
+            }
+          }}
+          className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary focus:border-primary"
+        />
+        {formData.venueImage && (
+          <div className="mt-2 rounded border p-2">
+            <img 
+              src={formData.venueImage} 
+              alt="صورة مكان الحفل" 
+              className="max-h-32 object-contain mx-auto" 
+            />
+          </div>
+        )}
       </div>
     </div>
   );
