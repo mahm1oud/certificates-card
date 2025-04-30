@@ -27,6 +27,7 @@ import cardsRouter from './api/cards';
 import layersRouter from './api/layers';
 import logosRouter from './api/logos';
 import signaturesRouter from './api/signatures';
+import { installerRoutes } from './api/installer';
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Setup directory structure
@@ -2224,6 +2225,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   
   // Use cards router for card-related endpoints
   app.use('/api/cards', cardsRouter);
+  
+  // Installer API - must be registered before other auth-required routes
+  app.use('/api/installer', installerRoutes);
 
   // Copy fields from one template to another (admin)
   app.post("/api/templates/copy-fields", isAuthenticated, async (req, res) => {

@@ -25,6 +25,7 @@ router.post('/display', isAdmin, async (req: Request, res: Response) => {
   try {
     const { displayMode, templateViewMode, enableSocialFormats, defaultSocialFormat } = req.body;
     
+    // تخزين كافة الإعدادات في كائن واحد
     const settings = {
       displayMode: displayMode || 'multi',
       templateViewMode: templateViewMode || 'multi-page', // إضافة خيار عرض القوالب (متعدد الصفحات أو صفحة واحدة)
@@ -32,7 +33,15 @@ router.post('/display', isAdmin, async (req: Request, res: Response) => {
       defaultSocialFormat: defaultSocialFormat || null
     };
     
-    await storage.updateSettings('display', settings);
+    // حفظ في قاعدة البيانات كسلسلة JSON
+    await storage.createOrUpdateSetting({
+      key: 'display',
+      value: JSON.stringify(settings),
+      category: 'app',
+      description: 'Display settings for the application'
+    });
+    
+    // إرسال استجابة نجاح
     res.json({ success: true, settings });
   } catch (error) {
     console.error('Error updating display settings:', error);
