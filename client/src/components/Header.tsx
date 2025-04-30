@@ -2,6 +2,7 @@ import { Link, useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { useTranslation, LanguageSwitcher } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
+import { ThemeToggle } from "@/components/theme-toggle";
 import {
   NavigationMenu,
   NavigationMenuContent,
@@ -177,8 +178,9 @@ export default function Header() {
                       <div className="px-2 py-1.5">
                         <p className="text-xs text-muted-foreground">الإعدادات</p>
                       </div>
-                      <div className="px-4 py-2">
+                      <div className="px-4 py-2 flex items-center gap-2">
                         <LanguageSwitcher />
+                        <ThemeToggle />
                       </div>
                       <Separator className="my-2" />
                       <SheetClose asChild>
@@ -225,21 +227,9 @@ export default function Header() {
                       <div className="px-2 py-1.5">
                         <p className="text-xs text-muted-foreground">الإعدادات</p>
                       </div>
-                      <SheetClose asChild>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="w-full justify-start"
-                          asChild
-                        >
-                          <Link href="/user/preferences">
-                            <Settings className="ml-2 h-4 w-4" />
-                            إعدادات العرض
-                          </Link>
-                        </Button>
-                      </SheetClose>
-                      <div className="px-4 py-2">
+                      <div className="px-4 py-2 flex items-center gap-2">
                         <LanguageSwitcher />
+                        <ThemeToggle />
                       </div>
                     </>
                   )}
@@ -401,14 +391,9 @@ export default function Header() {
                 
                 <DropdownMenuSeparator />
                 <DropdownMenuLabel>الإعدادات</DropdownMenuLabel>
-                <DropdownMenuItem asChild>
-                  <Link href="/user/preferences">
-                    <Settings className="ml-2 h-4 w-4" />
-                    إعدادات العرض
-                  </Link>
-                </DropdownMenuItem>
-                <div className="p-2">
+                <div className="p-2 flex items-center gap-2">
                   <LanguageSwitcher />
+                  <ThemeToggle />
                 </div>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
@@ -422,26 +407,8 @@ export default function Header() {
             </DropdownMenu>
           ) : (
             <div className="flex space-x-2 space-x-reverse items-center">
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon">
-                    <Settings className="h-5 w-5" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-56">
-                  <DropdownMenuLabel>الإعدادات</DropdownMenuLabel>
-                  <DropdownMenuItem asChild>
-                    <Link href="/user/preferences">
-                      <Settings className="ml-2 h-4 w-4" />
-                      إعدادات العرض
-                    </Link>
-                  </DropdownMenuItem>
-                  <div className="p-2">
-                    <LanguageSwitcher />
-                  </div>
-                </DropdownMenuContent>
-              </DropdownMenu>
-              
+              <LanguageSwitcher />
+              <ThemeToggle />
               <Button size="sm" variant="outline" asChild>
                 <Link href="/auth">
                   تسجيل الدخول
