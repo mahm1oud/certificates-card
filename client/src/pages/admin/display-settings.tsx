@@ -47,7 +47,7 @@ export default function AdminDisplaySettingsPage() {
   // Update settings mutation
   const { mutate, isPending } = useMutation({
     mutationFn: async (data: any) => {
-      return apiRequest("POST", "/api/admin/display-settings", data);
+      return apiRequest("POST", "/api/admin/settings/display", data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({

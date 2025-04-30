@@ -22,7 +22,6 @@ import {
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
-import { ThemeToggle } from "@/components/theme-toggle";
 
 export default function HomePage() {
   const { user } = useAuth();
@@ -138,38 +137,34 @@ export default function HomePage() {
           />
         </div>
         
-        <div className="flex flex-col items-center justify-center gap-4">
-          {user ? (
-            <div className="flex items-center justify-center gap-4">
-              <Button asChild>
-                <Link href="/user/dashboard">
-                  <User className="h-4 w-4 ml-2" />
-                  لوحة التحكم
-                </Link>
-              </Button>
-              <Button variant="outline" asChild>
-                <Link href="/user/cards">
-                  عرض بطاقاتي
-                </Link>
-              </Button>
-              <ThemeToggle />
-            </div>
-          ) : (
-            <div className="flex items-center justify-center gap-4">
-              <Button asChild>
-                <Link href="/auth">
-                  تسجيل الدخول
-                </Link>
-              </Button>
-              <Button variant="outline" asChild>
-                <Link href="/auth?tab=register">
-                  إنشاء حساب
-                </Link>
-              </Button>
-              <ThemeToggle />
-            </div>
-          )}
-        </div>
+        {user ? (
+          <div className="flex items-center justify-center gap-4">
+            <Button asChild>
+              <Link href="/user/dashboard">
+                <User className="h-4 w-4 ml-2" />
+                لوحة التحكم
+              </Link>
+            </Button>
+            <Button variant="outline" asChild>
+              <Link href="/user/cards">
+                عرض بطاقاتي
+              </Link>
+            </Button>
+          </div>
+        ) : (
+          <div className="flex items-center justify-center gap-4">
+            <Button asChild>
+              <Link href="/auth">
+                تسجيل الدخول
+              </Link>
+            </Button>
+            <Button variant="outline" asChild>
+              <Link href="/auth?tab=register">
+                إنشاء حساب
+              </Link>
+            </Button>
+          </div>
+        )}
       </section>
       
       {/* Categories Section */}

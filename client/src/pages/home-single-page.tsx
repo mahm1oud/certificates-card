@@ -29,12 +29,13 @@ import {
 import { useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
+import { ThemeToggle } from "@/components/theme-toggle";
 import CustomForm from "@/components/forms/custom-form";
 import WeddingForm from "@/components/forms/wedding-form";
-import EngagementForm from "@/components/forms/engagement-form";
-import GraduationForm from "@/components/forms/graduation-form";
-import EidForm from "@/components/forms/eid-form";
-import RamadanForm from "@/components/forms/ramadan-form";
+import EngagementForm from "@/components/forms/legacy/engagement-form";
+import GraduationForm from "@/components/forms/legacy/graduation-form";
+import EidForm from "@/components/forms/legacy/eid-form";
+import RamadanForm from "@/components/forms/legacy/ramadan-form";
 import { getCategoryName, downloadImage } from "@/lib/utils";
 import ShareOptions from "@/components/share-options";
 import {
@@ -542,34 +543,38 @@ export default function HomePageSinglePage() {
           />
         </div>
         
-        {user ? (
-          <div className="flex items-center justify-center gap-4">
-            <Button asChild>
-              <Link href="/user/dashboard">
-                <User className="h-4 w-4 ml-2" />
-                لوحة التحكم
-              </Link>
-            </Button>
-            <Button variant="outline" asChild>
-              <Link href="/user/cards">
-                عرض بطاقاتي
-              </Link>
-            </Button>
-          </div>
-        ) : (
-          <div className="flex items-center justify-center gap-4">
-            <Button asChild>
-              <Link href="/auth">
-                تسجيل الدخول
-              </Link>
-            </Button>
-            <Button variant="outline" asChild>
-              <Link href="/auth?tab=register">
-                إنشاء حساب
-              </Link>
-            </Button>
-          </div>
-        )}
+        <div className="flex flex-col items-center justify-center gap-4">
+          {user ? (
+            <div className="flex items-center justify-center gap-4">
+              <Button asChild>
+                <Link href="/user/dashboard">
+                  <User className="h-4 w-4 ml-2" />
+                  لوحة التحكم
+                </Link>
+              </Button>
+              <Button variant="outline" asChild>
+                <Link href="/user/cards">
+                  عرض بطاقاتي
+                </Link>
+              </Button>
+              <ThemeToggle />
+            </div>
+          ) : (
+            <div className="flex items-center justify-center gap-4">
+              <Button asChild>
+                <Link href="/auth">
+                  تسجيل الدخول
+                </Link>
+              </Button>
+              <Button variant="outline" asChild>
+                <Link href="/auth?tab=register">
+                  إنشاء حساب
+                </Link>
+              </Button>
+              <ThemeToggle />
+            </div>
+          )}
+        </div>
       </section>
       
       {/* Categories Section */}
