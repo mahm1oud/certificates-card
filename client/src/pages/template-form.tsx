@@ -25,12 +25,19 @@ const TemplateForm = () => {
     retry: 3
   });
   
-  // جلب الحقول المخصصة للقالب
-  const { data: templateFields, isLoading: isLoadingFields } = useQuery({
-    queryKey: [`/api/admin/template-fields/${templateId}`],
-    queryFn: getQueryFn({ on401: "redirect-to-login" }),
+  // جلب الحقول المخصصة للقالب (المسار العام المباشر - لا يتطلب تسجيل دخول)
+  const { data: templateFields, isLoading: isLoadingFields, error: templateFieldsError } = useQuery({
+    queryKey: [`/api/template-fields/${templateId}`],
+    queryFn: getQueryFn(),
     enabled: !!templateId,
   });
+
+  // طباعة معلومات تشخيصية للتأكد من العمل الصحيح
+  console.log(`[DEBUG] Template ID: ${templateId}, isLoadingFields: ${isLoadingFields}, 
+    fieldsCount: ${templateFields ? (Array.isArray(templateFields) ? templateFields.length : 'not array') : 'null'}`);
+  if (templateFieldsError) {
+    console.error(`[ERROR] Failed to fetch template fields:`, templateFieldsError);
+  }
   
   const [formData, setFormData] = useState({});
 
@@ -184,9 +191,9 @@ const TemplateForm = () => {
       );
     }
     
-    // إذا كان لدينا حقول مخصصة للقالب، نستخدم نموذج مخصص
+    // إذا كان لدينا حقول مخصصة للقالب، نستخدم نموذج مخصص (يعمل الآن للمستخدمين غير المسجلين أيضاً)
     if (templateFields && Array.isArray(templateFields) && templateFields.length > 0) {
-      console.log("Using custom form with template fields:", templateFields);
+      console.log(`Using custom form with ${templateFields.length} template fields for template ${templateId}`);
       return <CustomForm 
         onChange={handleFormChange} 
         template={{

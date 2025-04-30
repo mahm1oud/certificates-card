@@ -167,19 +167,6 @@ export default function HomePage() {
         )}
       </section>
       
-      {/* Development Testing Section */}
-      <section className="container py-4 bg-blue-50 rounded-lg mb-6 border border-blue-200">
-        <h2 className="text-xl font-bold mb-2">🛠️ أدوات التطوير</h2>
-        <p className="text-sm text-gray-600 mb-3">تجربة الميزات الجديدة (للمطورين فقط)</p>
-        <div className="flex gap-3">
-          <Button asChild>
-            <Link href="/template-editor/1">
-              محرر القوالب المطور
-            </Link>
-          </Button>
-        </div>
-      </section>
-      
       {/* Categories Section */}
       <section>
         <div className="flex overflow-x-auto pb-4 scrollbar-thin scrollbar-thumb-muted-foreground/20 scrollbar-track-transparent">

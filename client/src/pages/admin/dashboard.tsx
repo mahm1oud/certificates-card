@@ -1,6 +1,6 @@
 import { useAuth } from "@/hooks/use-auth";
-import { useQuery } from "@tanstack/react-query";
-import { getQueryFn } from "@/lib/queryClient";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { getQueryFn, apiRequest } from "@/lib/queryClient";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -18,14 +18,33 @@ import {
   CalendarDays,
   Plus,
   ArrowUpRight,
-  ArrowDownRight
+  ArrowDownRight,
+  LayoutGrid,
+  Layout,
+  Settings,
+  Save
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "wouter";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { toast } from "@/hooks/use-toast";
 
 export default function AdminDashboardPage() {
   const { user } = useAuth();
   const [selectedTab, setSelectedTab] = useState("overview");
+  const [displaySettings, setDisplaySettings] = useState<{
+    displayMode: string;
+    templateViewMode: string;
+    enableSocialFormats: boolean;
+    defaultSocialFormat: string;
+  }>({
+    displayMode: "multi",
+    templateViewMode: "multi-page",
+    enableSocialFormats: true,
+    defaultSocialFormat: "instagram"
+  });
+  const [isLoadingSettings, setIsLoadingSettings] = useState(true);
 
   // Fetch admin stats
   const { data: stats, isLoading: isStatsLoading } = useQuery({
@@ -51,8 +70,84 @@ export default function AdminDashboardPage() {
     queryFn: getQueryFn({}),
   });
 
+  // Fetch display settings
+  useEffect(() => {
+    async function fetchDisplaySettings() {
+      try {
+        const response = await fetch('/api/display');
+        if (response.ok) {
+          const data = await response.json();
+          setDisplaySettings(data.settings || {
+            displayMode: "multi",
+            templateViewMode: "multi-page",
+            enableSocialFormats: true,
+            defaultSocialFormat: "instagram"
+          });
+        }
+      } catch (error) {
+        console.error('Error fetching display settings:', error);
+      } finally {
+        setIsLoadingSettings(false);
+      }
+    }
+    
+    fetchDisplaySettings();
+  }, []);
+
+  // Save display settings
+  const saveDisplaySettingsMutation = useMutation({
+    mutationFn: async (settings: typeof displaySettings) => {
+      return await apiRequest('/api/admin/settings/display', {
+        method: 'POST',
+        body: { settings }
+      });
+    },
+    onSuccess: () => {
+      toast({
+        title: "تم حفظ الإعدادات",
+        description: "تم حفظ إعدادات العرض بنجاح",
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "خطأ في حفظ الإعدادات",
+        description: "حدث خطأ أثناء حفظ إعدادات العرض",
+        variant: "destructive",
+      });
+      console.error('Error saving display settings:', error);
+    }
+  });
+
+  // Handle display mode change
+  const handleDisplayModeChange = (isSingle: boolean) => {
+    setDisplaySettings(prev => ({
+      ...prev,
+      displayMode: isSingle ? 'single' : 'multi'
+    }));
+    
+    // Save changes immediately
+    saveDisplaySettingsMutation.mutate({
+      ...displaySettings,
+      displayMode: isSingle ? 'single' : 'multi'
+    });
+  };
+
+  // Handle template view mode change
+  const handleTemplateViewModeChange = (isSingle: boolean) => {
+    setDisplaySettings(prev => ({
+      ...prev,
+      templateViewMode: isSingle ? 'single-page' : 'multi-page'
+    }));
+    
+    // Save changes immediately
+    saveDisplaySettingsMutation.mutate({
+      ...displaySettings,
+      templateViewMode: isSingle ? 'single-page' : 'multi-page'
+    });
+  };
+
   // Get loading state
-  const isLoading = isStatsLoading || isUsersLoading || isCardsLoading || isCertificatesLoading;
+  const isLoading = isStatsLoading || isUsersLoading || isCardsLoading || isCertificatesLoading || isLoadingSettings;
   
   // Format date
   const formatDate = (dateString: string) => {
@@ -90,6 +185,59 @@ export default function AdminDashboardPage() {
           ) : (
             <>
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+                {/* إعدادات سريعة */}
+                <Card className="lg:col-span-4">
+                  <CardHeader className="pb-3">
+                    <CardTitle>إعدادات سريعة</CardTitle>
+                    <CardDescription>تحكم سريع في الإعدادات الأكثر استخداماً</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+                      {/* طريقة عرض التطبيق */}
+                      <div className="space-y-3">
+                        <h3 className="text-base font-medium">طريقة عرض التطبيق</h3>
+                        <div className="flex items-center justify-between">
+                          <div className="space-y-0.5">
+                            <div className="text-sm">نمط العرض الموحد (صفحة واحدة)</div>
+                            <div className="text-xs text-muted-foreground">عرض كل شيء في صفحة واحدة</div>
+                          </div>
+                          <Switch
+                            checked={displaySettings.displayMode === 'single'}
+                            onCheckedChange={(checked) => handleDisplayModeChange(checked)}
+                          />
+                        </div>
+                      </div>
+
+                      {/* طريقة عرض القوالب */}
+                      <div className="space-y-3">
+                        <h3 className="text-base font-medium">طريقة عرض القوالب</h3>
+                        <div className="flex items-center justify-between">
+                          <div className="space-y-0.5">
+                            <div className="text-sm">القوالب في صفحة واحدة</div>
+                            <div className="text-xs text-muted-foreground">عرض القوالب في صفحة واحدة</div>
+                          </div>
+                          <Switch
+                            checked={displaySettings.templateViewMode === 'single-page'}
+                            onCheckedChange={(checked) => handleTemplateViewModeChange(checked)}
+                          />
+                        </div>
+                      </div>
+
+                      {/* الإعدادات المتقدمة */}
+                      <div className="space-y-3">
+                        <h3 className="text-base font-medium">إعدادات النظام</h3>
+                        <Button asChild variant="outline" className="w-full justify-between">
+                          <Link href="/admin/display-settings">
+                            <span>إدارة إعدادات العرض</span>
+                            <Settings className="h-4 w-4 ml-2" />
+                          </Link>
+                        </Button>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+                
+                {/* إحصائيات */}
                 <Card>
                   <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                     <CardTitle className="text-sm font-medium">المستخدمون</CardTitle>
@@ -163,6 +311,58 @@ export default function AdminDashboardPage() {
                   </CardContent>
                 </Card>
               </div>
+
+              {/* إعدادات سريعة */}
+              <Card className="col-span-7">
+                <CardHeader>
+                  <CardTitle>إعدادات سريعة</CardTitle>
+                  <CardDescription>إدارة الإعدادات الأكثر استخداماً</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+                    {/* طريقة عرض التطبيق */}
+                    <div className="space-y-3">
+                      <h3 className="text-base font-medium">طريقة عرض التطبيق</h3>
+                      <div className="flex items-center justify-between">
+                        <div className="space-y-0.5">
+                          <div className="text-sm">نمط العرض الموحد (صفحة واحدة)</div>
+                          <div className="text-xs text-muted-foreground">عرض كل شيء في صفحة واحدة</div>
+                        </div>
+                        <Switch
+                          checked={displaySettings.displayMode === 'single'}
+                          onCheckedChange={(checked) => handleDisplayModeChange(checked)}
+                        />
+                      </div>
+                    </div>
+
+                    {/* طريقة عرض القوالب */}
+                    <div className="space-y-3">
+                      <h3 className="text-base font-medium">طريقة عرض القوالب</h3>
+                      <div className="flex items-center justify-between">
+                        <div className="space-y-0.5">
+                          <div className="text-sm">القوالب في صفحة واحدة</div>
+                          <div className="text-xs text-muted-foreground">عرض القوالب في صفحة واحدة</div>
+                        </div>
+                        <Switch
+                          checked={displaySettings.templateViewMode === 'single-page'}
+                          onCheckedChange={(checked) => handleTemplateViewModeChange(checked)}
+                        />
+                      </div>
+                    </div>
+
+                    {/* الإعدادات المتقدمة */}
+                    <div className="space-y-3">
+                      <h3 className="text-base font-medium">إعدادات النظام</h3>
+                      <Button asChild variant="outline" className="w-full justify-between">
+                        <Link href="/admin/settings">
+                          <span>إدارة كافة الإعدادات</span>
+                          <Settings className="h-4 w-4 ml-2" />
+                        </Link>
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
 
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
                 <Card className="col-span-7 md:col-span-4">
@@ -289,6 +489,65 @@ export default function AdminDashboardPage() {
                   </CardFooter>
                 </Card>
 
+                <Card>
+                  <CardHeader>
+                    <CardTitle>إعدادات العرض</CardTitle>
+                    <CardDescription>تخصيص واجهة المستخدم وطريقة عرض القوالب</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    {/* نمط عرض التطبيق */}
+                    <div className="space-y-3">
+                      <div className="flex flex-col space-y-1.5">
+                        <h3 className="text-lg font-semibold">نمط عرض التطبيق</h3>
+                        <p className="text-sm text-muted-foreground">اختر نمط عرض التطبيق للمستخدمين</p>
+                      </div>
+                      
+                      <div className="grid grid-cols-1 gap-4">
+                        <div className="border rounded-lg p-4 flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="flex items-center justify-center w-10 h-10 rounded-md bg-muted/80">
+                              <LayoutGrid className="h-5 w-5 text-muted-foreground" />
+                            </div>
+                            <div>
+                              <h4 className="font-medium">النمط التقليدي (متعدد الصفحات)</h4>
+                              <p className="text-sm text-muted-foreground">
+                                يتم تقسيم التطبيق إلى صفحات منفصلة
+                              </p>
+                            </div>
+                          </div>
+                          <Switch
+                            id="displayMode-multi"
+                            checked={displaySettings.displayMode === 'multi'}
+                            onCheckedChange={(checked) => {
+                              if (checked) handleDisplayModeChange(false);
+                            }}
+                          />
+                        </div>
+                        
+                        <div className="border rounded-lg p-4 flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="flex items-center justify-center w-10 h-10 rounded-md bg-muted/80">
+                              <Layout className="h-5 w-5 text-muted-foreground" />
+                            </div>
+                            <div>
+                              <h4 className="font-medium">النمط الموحد (صفحة واحدة)</h4>
+                              <p className="text-sm text-muted-foreground">
+                                يتم عرض كل شيء في صفحة واحدة
+                              </p>
+                            </div>
+                          </div>
+                          <Switch
+                            id="displayMode-single"
+                            checked={displaySettings.displayMode === 'single'}
+                            onCheckedChange={(checked) => {
+                              if (checked) handleDisplayModeChange(true);
+                            }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
                 <Card>
                   <CardHeader>
                     <CardTitle>روابط سريعة</CardTitle>

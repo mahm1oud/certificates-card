@@ -333,9 +333,9 @@ export default function TemplateFieldsPage() {
           color: "#ffffff",
           blur: 5
         },
-        // إعدادات افتراضية للصور - سيتم حسابها ديناميكياً بناءً على حجم القالب
-        imageMaxWidth: undefined, // سيتم حسابها تلقائياً كربع عرض القالب
-        imageMaxHeight: undefined, // سيتم حسابها تلقائياً كربع ارتفاع القالب
+        // إعدادات افتراضية للصور - كنسبة مئوية من أبعاد القالب
+        imageMaxWidth: 25, // 25% من عرض القالب
+        imageMaxHeight: 25, // 25% من ارتفاع القالب
         imageBorder: false,
         imageRounded: false,
         layer: 1
@@ -541,9 +541,9 @@ export default function TemplateFieldsPage() {
                         top: `${field.position?.y || 50}%`,
                         left: `${field.position?.x || 50}%`,
                         transform: 'translate(-50%, -50%)',
-                        // استخدام أبعاد نسبية للصورة استنادًا إلى حجم القالب
-                        width: `${field.style?.imageMaxWidth || '25%'}`,
-                        height: `${field.style?.imageMaxHeight || 'auto'}`,
+                        // استخدام أبعاد نسبية للصورة كنسبة مئوية من أبعاد القالب
+                        width: `${field.style?.imageMaxWidth || 25}%`,
+                        height: `${field.style?.imageMaxHeight || 25}%`,
                         maxWidth: '80%',
                         maxHeight: '80%',
                         zIndex: field.style?.layer || 1
@@ -552,7 +552,7 @@ export default function TemplateFieldsPage() {
                       <div className="flex flex-col items-center justify-center">
                         <ImageIcon className="h-12 w-12 text-green-500/70" />
                         <span className="text-sm font-medium mt-2">{field.label}</span>
-                        <span className="text-xs mt-1">{field.style?.imageMaxWidth}×{field.style?.imageMaxHeight}</span>
+                        <span className="text-xs mt-1">{field.style?.imageMaxWidth || 25}% × {field.style?.imageMaxHeight || 25}%</span>
                       </div>
                     </div>
                   ) : (
@@ -1250,48 +1250,48 @@ export default function TemplateFieldsPage() {
                           <div className="grid md:grid-cols-2 gap-6">
                             <div>
                               <div className="grid gap-2">
-                                <Label htmlFor="imageMaxWidth">العرض الأقصى للصورة (بكسل)</Label>
+                                <Label htmlFor="imageMaxWidth">عرض الصورة (% من القالب)</Label>
                                 <div className="flex items-center gap-2">
                                   <div className="flex-1">
                                     <Slider
                                       id="imageMaxWidth"
-                                      min={50}
-                                      max={500}
-                                      step={10}
-                                      value={[fieldFormData.style?.imageMaxWidth || 300]}
+                                      min={1}
+                                      max={100}
+                                      step={1}
+                                      value={[fieldFormData.style?.imageMaxWidth || 25]}
                                       onValueChange={([value]) => handleStyleChange('imageMaxWidth', value)}
                                     />
                                   </div>
                                   <Input
                                     type="number"
-                                    min={50}
-                                    max={500}
+                                    min={1}
+                                    max={100}
                                     className="w-20"
-                                    value={fieldFormData.style?.imageMaxWidth || 300}
+                                    value={fieldFormData.style?.imageMaxWidth || 25}
                                     onChange={(e) => handleStyleChange('imageMaxWidth', Number(e.target.value))}
                                   />
                                 </div>
                               </div>
                               
                               <div className="grid gap-2 mt-4">
-                                <Label htmlFor="imageMaxHeight">الارتفاع الأقصى للصورة (بكسل)</Label>
+                                <Label htmlFor="imageMaxHeight">ارتفاع الصورة (% من القالب)</Label>
                                 <div className="flex items-center gap-2">
                                   <div className="flex-1">
                                     <Slider
                                       id="imageMaxHeight"
-                                      min={50}
-                                      max={500}
-                                      step={10}
-                                      value={[fieldFormData.style?.imageMaxHeight || 300]}
+                                      min={1}
+                                      max={100}
+                                      step={1}
+                                      value={[fieldFormData.style?.imageMaxHeight || 25]}
                                       onValueChange={([value]) => handleStyleChange('imageMaxHeight', value)}
                                     />
                                   </div>
                                   <Input
                                     type="number"
-                                    min={50}
-                                    max={500}
+                                    min={1}
+                                    max={100}
                                     className="w-20"
-                                    value={fieldFormData.style?.imageMaxHeight || 300}
+                                    value={fieldFormData.style?.imageMaxHeight || 25}
                                     onChange={(e) => handleStyleChange('imageMaxHeight', Number(e.target.value))}
                                   />
                                 </div>
@@ -1348,7 +1348,7 @@ export default function TemplateFieldsPage() {
                                 <p className="text-xs text-muted-foreground mt-1">المساحة المتوقعة التي ستشغلها الصورة على القالب</p>
                               </div>
                               <div className="text-sm">
-                                {fieldFormData.style?.imageMaxWidth || 300} × {fieldFormData.style?.imageMaxHeight || 300} بكسل
+                                {fieldFormData.style?.imageMaxWidth || 25}% × {fieldFormData.style?.imageMaxHeight || 25}% من أبعاد القالب
                               </div>
                             </div>
                             
@@ -1356,8 +1356,8 @@ export default function TemplateFieldsPage() {
                               <div 
                                 className={`relative ${fieldFormData.style?.imageRounded ? 'rounded-full overflow-hidden' : 'rounded-md'}`}
                                 style={{
-                                  width: Math.min(200, fieldFormData.style?.imageMaxWidth || 300) + 'px',
-                                  height: Math.min(200, fieldFormData.style?.imageMaxHeight || 300) + 'px',
+                                  width: Math.min(200, (fieldFormData.style?.imageMaxWidth || 25) * 2) + 'px',
+                                  height: Math.min(200, (fieldFormData.style?.imageMaxHeight || 25) * 2) + 'px',
                                   border: fieldFormData.style?.imageBorder ? '2px solid #64748b' : 'none',
                                   background: '#f1f5f9',
                                   display: 'flex',
@@ -1365,7 +1365,7 @@ export default function TemplateFieldsPage() {
                                   justifyContent: 'center'
                                 }}
                               >
-                                <ImageIcon className="text-gray-400" size={Math.min(60, fieldFormData.style?.imageMaxWidth || 300) / 2} />
+                                <ImageIcon className="text-gray-400" size={Math.min(60, (fieldFormData.style?.imageMaxWidth || 25) * 0.8)} />
                               </div>
                             </div>
                           </div>
@@ -1443,37 +1443,51 @@ export default function TemplateFieldsPage() {
                       <div className="space-y-4">
                         <div className="grid grid-cols-2 gap-4">
                           <div className="grid gap-2">
-                            <Label htmlFor="imageMaxWidth">الحد الأقصى للعرض (بكسل)</Label>
-                            <Input
-                              id="imageMaxWidth"
-                              type="number"
-                              min="0"
-                              value={fieldFormData.style?.imageMaxWidth || 300}
-                              onChange={(e) => setFieldFormData({
-                                ...fieldFormData,
-                                style: {
-                                  ...fieldFormData.style,
-                                  imageMaxWidth: parseInt(e.target.value) || 300
-                                }
-                              })}
-                            />
+                            <Label htmlFor="imageMaxWidth">عرض الصورة (% من القالب)</Label>
+                            <div className="grid grid-flow-col gap-2 items-center">
+                              <Input
+                                id="imageMaxWidth"
+                                type="number"
+                                min="1"
+                                max="100"
+                                value={fieldFormData.style?.imageMaxWidth || 25}
+                                onChange={(e) => setFieldFormData({
+                                  ...fieldFormData,
+                                  style: {
+                                    ...fieldFormData.style,
+                                    imageMaxWidth: parseInt(e.target.value) || 25
+                                  }
+                                })}
+                              />
+                              <span className="text-lg font-semibold">%</span>
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                              نسبة مئوية من عرض القالب
+                            </p>
                           </div>
                           
                           <div className="grid gap-2">
-                            <Label htmlFor="imageMaxHeight">الحد الأقصى للارتفاع (بكسل)</Label>
-                            <Input
-                              id="imageMaxHeight"
-                              type="number"
-                              min="0"
-                              value={fieldFormData.style?.imageMaxHeight || 300}
-                              onChange={(e) => setFieldFormData({
-                                ...fieldFormData,
-                                style: {
-                                  ...fieldFormData.style,
-                                  imageMaxHeight: parseInt(e.target.value) || 300
-                                }
-                              })}
-                            />
+                            <Label htmlFor="imageMaxHeight">ارتفاع الصورة (% من القالب)</Label>
+                            <div className="grid grid-flow-col gap-2 items-center">
+                              <Input
+                                id="imageMaxHeight"
+                                type="number"
+                                min="1"
+                                max="100"
+                                value={fieldFormData.style?.imageMaxHeight || 25}
+                                onChange={(e) => setFieldFormData({
+                                  ...fieldFormData,
+                                  style: {
+                                    ...fieldFormData.style,
+                                    imageMaxHeight: parseInt(e.target.value) || 25
+                                  }
+                                })}
+                              />
+                              <span className="text-lg font-semibold">%</span>
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                              نسبة مئوية من ارتفاع القالب
+                            </p>
                           </div>
                         </div>
                         
