@@ -4,9 +4,11 @@ import { useTranslation } from '@/lib/i18n';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { apiRequest } from '@/lib/queryClient';
-import { ImageIcon, InstagramIcon, TwitterIcon, FacebookIcon } from 'lucide-react';
+import { ImageIcon, InstagramIcon, TwitterIcon, FacebookIcon, ExternalLink } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
+import { Link } from 'wouter';
+import { useAuth } from '@/hooks/use-auth';
 
 // Define interface for social media format
 export interface SocialMediaFormat {
@@ -22,6 +24,7 @@ interface SocialMediaFormatsProps {
   selectedFormat?: string;
   cardImageUrl?: string;
   onGenerateImage?: () => void;
+  templateId?: string | number; // معرف القالب إذا كان متاحًا للتعديل
 }
 
 // Social Media Format Selection Component
@@ -29,15 +32,17 @@ export const SocialMediaFormats: React.FC<SocialMediaFormatsProps> = ({
   onFormatSelect,
   selectedFormat,
   cardImageUrl,
-  onGenerateImage
+  onGenerateImage,
+  templateId
 }) => {
   const { t } = useTranslation();
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<string>(selectedFormat || 'instagram');
   
-  // Fetch social media format settings
+  // Fetch social media format settings from public API
   const { data, isLoading, error } = useQuery({
-    queryKey: ['/api/admin/settings/social-formats'],
-    queryFn: () => apiRequest('GET', '/api/admin/settings/social-formats'),
+    queryKey: ['/api/social-formats'],
+    queryFn: () => apiRequest('GET', '/api/social-formats'),
   });
   
   // Select the format when tab changes
@@ -151,19 +156,35 @@ export const SocialMediaFormats: React.FC<SocialMediaFormatsProps> = ({
                       ({formats[formatKey].ratio})
                     </div>
                     
-                    <Button 
-                      className="mt-3 w-full"
-                      onClick={() => {
-                        // استخدم دالة التوليد من الأب إذا كانت متوفرة، وإلا استخدم الدالة المحلية
-                        if (onGenerateImage) {
-                          onGenerateImage();
-                        } else {
-                          handleGenerateImage();
-                        }
-                      }}
-                    >
-                      {t('share.generate')}
-                    </Button>
+                    <div className="mt-3 space-y-2">
+                      <Button 
+                        className="w-full"
+                        onClick={() => {
+                          // استخدم دالة التوليد من الأب إذا كانت متوفرة، وإلا استخدم الدالة المحلية
+                          if (onGenerateImage) {
+                            onGenerateImage();
+                          } else {
+                            handleGenerateImage();
+                          }
+                        }}
+                      >
+                        {t('share.generate')}
+                      </Button>
+                      
+                      {templateId && user?.role === 'admin' && (
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          className="w-full flex items-center gap-1 text-blue-600"
+                          asChild
+                        >
+                          <Link href={`/social-template-editor/${templateId}`}>
+                            <ExternalLink className="h-4 w-4" />
+                            {t('share.socialEditor') || 'محرر الشبكات الاجتماعية'}
+                          </Link>
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 </div>
                 

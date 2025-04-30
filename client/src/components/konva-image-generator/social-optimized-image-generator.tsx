@@ -1,16 +1,18 @@
 /**
- * مكون معاينة محسّن للبطاقات والشهادات
- * الإصدار 3.0 - أبريل 2025
+ * مكون معاينة محسّن للصور الاجتماعية مع دعم طبقات متعددة
+ * الإصدار 4.0 - أبريل 2025
  * 
  * ميزات هذا المكون المحسّن:
  * 1. يضمن تطابق 100% بين المعاينة والصورة النهائية
- * 2. يستخدم نفس خوارزمية الحساب الموجودة في السيرفر
- * 3. أكثر قابلية للصيانة وإعادة الاستخدام
- * 4. كود أكثر إيجازاً وأسهل للقراءة
+ * 2. دعم تنسيقات مواقع التواصل الاجتماعي المختلفة
+ * 3. دعم لخصائص طبقات zIndex
+ * 4. دعم إخفاء وإظهار الحقول
  */
 
 import React, { useRef, useState, useEffect } from 'react';
 import { Stage, Layer, Image, Text } from 'react-konva';
+import { useQuery } from '@tanstack/react-query';
+import { apiRequest } from '@/lib/queryClient';
 
 /**
  * مهم جداً: هذه القيمة يجب أن تكون متطابقة مع
@@ -21,10 +23,15 @@ import { Stage, Layer, Image, Text } from 'react-konva';
 const BASE_IMAGE_WIDTH = 1000;
 
 interface FieldConfig {
+  id?: number;
   name: string;
   label?: string;
   defaultValue?: string;
   position: { x: number; y: number };
+  zIndex?: number;
+  rotation?: number;
+  visible?: boolean;
+  type?: 'text' | 'image' | string;
   style?: {
     fontFamily?: string;
     fontSize?: number;
@@ -38,37 +45,64 @@ interface FieldConfig {
       color?: string;
       blur?: number;
     };
+    imageMaxWidth?: number;
+    imageMaxHeight?: number;
+    imageBorder?: boolean;
+    imageRounded?: boolean;
+    layer?: number;
   };
 }
 
-interface OptimizedImageGeneratorProps {
+interface SocialFormat {
+  width: number;
+  height: number;
+  ratio: string;
+  description: string;
+}
+
+interface SocialOptimizedImageGeneratorProps {
   templateImage: string;
   fields?: FieldConfig[];
   formData?: Record<string, any>;
-  width?: number;
-  height?: number;
+  format?: string; // 'instagram', 'facebook', etc.
   onImageGenerated?: (imageURL: string) => void;
   className?: string;
   quality?: 'preview' | 'medium' | 'high';
 }
 
-export const OptimizedImageGenerator: React.FC<OptimizedImageGeneratorProps> = ({
+export const SocialOptimizedImageGenerator: React.FC<SocialOptimizedImageGeneratorProps> = ({
   templateImage,
   fields = [],
   formData = {},
-  width = 800,
-  height = 600,
+  format = 'instagram',
   onImageGenerated,
   className = '',
   quality = 'preview',
 }) => {
   const stageRef = useRef<any>(null);
   const [image, setImage] = useState<HTMLImageElement | null>(null);
-  const [stageSize, setStageSize] = useState({ width, height });
+  const [stageSize, setStageSize] = useState({ width: 800, height: 800 });
+  
+  // جلب تنسيقات الشبكات الاجتماعية
+  const { data: formatData } = useQuery({
+    queryKey: ['/api/social-formats'],
+    queryFn: () => apiRequest('GET', '/api/social-formats'),
+  });
+  
+  // اختيار التنسيق المناسب
+  const socialFormats = formatData?.formats || {
+    instagram: { width: 1080, height: 1080, ratio: '1:1', description: 'Instagram (Square)' },
+    facebook: { width: 1200, height: 630, ratio: '1.91:1', description: 'Facebook' },
+    twitter: { width: 1200, height: 675, ratio: '16:9', description: 'Twitter' },
+    linkedin: { width: 1200, height: 627, ratio: '1.91:1', description: 'LinkedIn' },
+    whatsapp: { width: 800, height: 800, ratio: '1:1', description: 'WhatsApp' }
+  };
+  
+  const selectedFormat = socialFormats[format] as SocialFormat;
   
   // تحميل صورة القالب
   useEffect(() => {
-    if (!templateImage) return;
+    if (!templateImage || !selectedFormat) return;
 
     const img = new window.Image();
     img.crossOrigin = 'anonymous';
@@ -77,42 +111,26 @@ export const OptimizedImageGenerator: React.FC<OptimizedImageGeneratorProps> = (
     img.onload = () => {
       setImage(img);
       
-      // حساب نسبة الأبعاد
-      const aspectRatio = img.width / img.height;
+      // حساب نسبة الأبعاد المطلوبة للتنسيق الاجتماعي
+      const formatRatio = selectedFormat.width / selectedFormat.height;
       
-      console.log(`Original Image: ${img.width}x${img.height}, ratio: ${aspectRatio}`);
-      console.log(`BASE_IMAGE_WIDTH: ${BASE_IMAGE_WIDTH}`);
+      // حساب الحجم المناسب للعرض مع الحفاظ على نسبة الأبعاد المطلوبة
+      let displayWidth = Math.min(800, window.innerWidth - 40);
+      let displayHeight = displayWidth / formatRatio;
       
-      // حساب الحجم المناسب للعرض
-      let displayWidth, displayHeight;
+      console.log(`Format: ${format}, Ratio: ${formatRatio}`);
+      console.log(`Display size: ${displayWidth}x${displayHeight}`);
       
-      // الحفاظ على نسبة العرض إلى الارتفاع الأصلية لضمان عدم تشويه الصورة
-      if (width && !height) {
-        // إذا تم تحديد العرض فقط
-        displayWidth = width;
-        displayHeight = width / aspectRatio;
-      } else if (height && !width) {
-        // إذا تم تحديد الارتفاع فقط
-        displayHeight = height;
-        displayWidth = height * aspectRatio;
-      } else if (width && height) {
-        // إذا تم تحديد كلاهما، استخدم التناسب الأقل لضمان تناسب الصورة ضمن المساحة المحددة
-        const widthRatio = width / img.width;
-        const heightRatio = height / img.height;
-        const ratio = Math.min(widthRatio, heightRatio);
-        
-        displayWidth = img.width * ratio;
-        displayHeight = img.height * ratio;
-      } else {
-        // إذا لم يتم تحديد أي منهما، استخدم حجم مناسب استنادًا إلى BASE_IMAGE_WIDTH
-        displayWidth = Math.min(BASE_IMAGE_WIDTH, window.innerWidth - 40);
-        displayHeight = displayWidth / aspectRatio;
-      }
-      
-      console.log(`Using stage size: ${displayWidth}x${displayHeight}`);
-      setStageSize({ width: displayWidth, height: displayHeight });
+      setStageSize({
+        width: displayWidth,
+        height: displayHeight
+      });
     };
-  }, [templateImage, width, height]);
+    
+    img.onerror = (error) => {
+      console.error('Failed to load template image:', error);
+    };
+  }, [templateImage, format, selectedFormat]);
 
   // استخراج قيمة الحقل من بيانات النموذج
   const getFieldValue = (field: FieldConfig): string => {
@@ -121,13 +139,15 @@ export const OptimizedImageGenerator: React.FC<OptimizedImageGeneratorProps> = (
 
   // معالجة خصائص النص لاستخدامها في Konva
   const getTextProps = (field: FieldConfig) => {
+    if (field.visible === false) return null;
+    
     const style = field.style || {};
     
     // اختيار نوع الخط من خصائص الحقل أو استخدام القيمة الافتراضية
     const fontFamily = style.fontFamily || 'Cairo';
     
     // حساب حجم الخط بنفس الطريقة المستخدمة في السيرفر - مع مراعاة معامل القياس
-    const scaleFactor = stageSize.width / BASE_IMAGE_WIDTH;
+    const scaleFactor = stageSize.width / selectedFormat.width;
     
     // استخدام حجم الخط المحدد في خصائص الحقل، مع الحد الأدنى والأقصى لضمان القراءة على جميع الأجهزة
     let baseFontSize = style.fontSize || 24;
@@ -169,7 +189,7 @@ export const OptimizedImageGenerator: React.FC<OptimizedImageGeneratorProps> = (
     // لون النص من خصائص الحقل
     const textColor = style.color || '#000000';
     
-    console.log(`Field ${field.name}: font="${fontFamily} ${fontWeight} ${fontSize}px", color=${textColor}, scaleFactor=${scaleFactor.toFixed(2)}, x=${x}, y=${y}`);
+    const rotation = field.rotation || 0;
     
     return {
       text: getFieldValue(field),
@@ -186,6 +206,7 @@ export const OptimizedImageGenerator: React.FC<OptimizedImageGeneratorProps> = (
       shadowBlur,
       shadowOffset: { x: 0, y: 0 },
       perfectDrawEnabled: true,
+      rotation: rotation
     };
   };
 
@@ -206,7 +227,7 @@ export const OptimizedImageGenerator: React.FC<OptimizedImageGeneratorProps> = (
     }
     
     // التأكد من وجود عوامل قياس متناسقة لضمان الدقة
-    console.log(`Generating preview image with pixelRatio: ${pixelRatio}`);
+    console.log(`Generating social preview image for ${format} with pixelRatio: ${pixelRatio}`);
     
     // توليد الصورة
     const dataUrl = stageRef.current.toDataURL({
@@ -225,24 +246,31 @@ export const OptimizedImageGenerator: React.FC<OptimizedImageGeneratorProps> = (
 
   // تنفيذ توليد الصورة عند تحميل جميع العناصر
   useEffect(() => {
-    if (image && stageRef.current) {
+    if (image && stageRef.current && selectedFormat) {
       // انتظر قليلاً للتأكد من رسم جميع العناصر
       const timer = setTimeout(() => {
-        console.log("Generating image after elements loaded");
+        console.log("Generating social image after elements loaded");
         generatePreviewImage();
       }, 200); // زيادة فترة الانتظار لضمان رسم جميع العناصر بشكل صحيح
       
       return () => clearTimeout(timer);
     }
-  }, [image, fields, formData, stageSize, quality]);
+  }, [image, fields, formData, stageSize, quality, format, selectedFormat]);
+
+  // ترتيب الحقول حسب zIndex
+  const sortedFields = [...fields].sort((a, b) => (a.zIndex || 0) - (b.zIndex || 0))
+                                  .filter(field => field.visible !== false);
 
   return (
     <div className={`relative ${className}`}>
+      <h2 className="text-center text-sm font-medium mb-2">
+        {selectedFormat?.description || format} ({selectedFormat?.width || 0}×{selectedFormat?.height || 0})
+      </h2>
       <Stage 
         ref={stageRef} 
         width={stageSize.width} 
         height={stageSize.height}
-        style={{ margin: '0 auto' }}
+        style={{ margin: '0 auto', border: '1px solid #eee', borderRadius: '4px', overflow: 'hidden' }}
       >
         <Layer>
           {/* رسم صورة القالب */}
@@ -255,8 +283,8 @@ export const OptimizedImageGenerator: React.FC<OptimizedImageGeneratorProps> = (
             />
           )}
           
-          {/* رسم الحقول */}
-          {fields.map((field, index) => (
+          {/* رسم الحقول - ترتيب حسب zIndex */}
+          {sortedFields.map((field, index) => (
             <Text 
               key={`${field.name}-${index}`} 
               {...getTextProps(field)}
@@ -268,4 +296,4 @@ export const OptimizedImageGenerator: React.FC<OptimizedImageGeneratorProps> = (
   );
 };
 
-export default OptimizedImageGenerator;
+export default SocialOptimizedImageGenerator;

@@ -102,23 +102,23 @@ export default function AdminSidebar({ className }: AdminSidebarProps) {
       icon: <Settings className="h-4 w-4" />,
       children: [
         {
-          title: t('admin.menu.general'),
-          href: '/admin/settings/general',
+          title: "الإعدادات العامة",
+          href: '/admin/settings',
           icon: <Settings className="h-4 w-4" />
         },
         {
-          title: t('admin.menu.languages'),
-          href: '/admin/settings/languages',
-          icon: <Languages className="h-4 w-4" />
+          title: "إعدادات العرض",
+          href: '/admin/display-settings',
+          icon: <LayoutGrid className="h-4 w-4" />
         },
         {
-          title: t('admin.menu.auth'),
+          title: "إعدادات المصادقة",
           href: '/admin/settings/auth',
           icon: <Shield className="h-4 w-4" />
         },
         {
-          title: t('admin.menu.site'),
-          href: '/admin/settings/site',
+          title: "إعدادات مواقع التواصل",
+          href: '/admin/social-auth-settings',
           icon: <Globe className="h-4 w-4" />
         }
       ]
