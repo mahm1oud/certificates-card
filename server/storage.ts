@@ -61,6 +61,10 @@ export interface IStorage {
   getAllUsers(options?: { limit?: number; offset?: number; search?: string }): Promise<{ users: User[]; total: number }>;
   deleteUser(id: number): Promise<boolean>;
   
+  // User Preferences methods
+  getUserPreferences(userId: number): Promise<{layout?: string; theme?: string} | undefined>;
+  saveUserPreferences(userId: number, preferences: {layout?: string; theme?: string}): Promise<boolean>;
+  
   // Auth Provider Settings
   getAuthSettings(provider: string): Promise<AuthProviderSettings | undefined>;
   getAllAuthSettings(): Promise<AuthProviderSettings[]>;
@@ -162,6 +166,13 @@ export interface IStorage {
   createUserSignature(signature: InsertUserSignature): Promise<UserSignature>;
   updateUserSignature(id: number, data: Partial<InsertUserSignature>): Promise<UserSignature | undefined>;
   deleteUserSignature(id: number): Promise<boolean>;
+  
+  // Settings methods - إعدادات النظام
+  getSettings(category: string): Promise<any>;
+  getSettingsByCategory(category: string): Promise<{key: string, value: any}[]>;
+  updateSettings(category: string, settings: any): Promise<boolean>;
+  getSetting(category: string, key: string): Promise<any>;
+  updateSetting(category: string, key: string, value: any): Promise<boolean>;
 }
 
 // Database storage implementation
@@ -281,7 +292,7 @@ export class DatabaseStorage implements IStorage {
               titleAr: 'دعوة زفاف كلاسيكية',
               slug: 'Wedding11',
               categoryId: weddingCategory.id,
-              imageUrl: 'https://images.unsplash.com/photo-1549813069-f95e44d7f498?ixlib=rb-1.2.1&auto=format&fit=crop&w=600&q=80',
+              imageUrl: '/static/wedding-template.svg',
               displayOrder: 1,
               fields: ['groomName', 'brideName', 'weddingDate', 'weddingTime', 'weddingLocation', 'additionalNotes'],
               defaultValues: {
@@ -300,7 +311,7 @@ export class DatabaseStorage implements IStorage {
               titleAr: 'بطاقة رمضانية',
               slug: 'Ramadan2',
               categoryId: ramadanCategory.id,
-              imageUrl: 'https://images.unsplash.com/photo-1566624790190-511a09f6ddbd?ixlib=rb-1.2.1&auto=format&fit=crop&w=600&q=80',
+              imageUrl: '/static/ramadan-template.svg',
               displayOrder: 1,
               fields: ['sender', 'recipient', 'message', 'userImage'],
               defaultValues: {},
@@ -317,7 +328,7 @@ export class DatabaseStorage implements IStorage {
               titleAr: 'بطاقة عيد',
               slug: 'Eid4',
               categoryId: eidCategory.id,
-              imageUrl: 'https://images.unsplash.com/photo-1651980662088-77eda715d13a?ixlib=rb-1.2.1&auto=format&fit=crop&w=600&q=80',
+              imageUrl: '/static/eid-template.svg',
               displayOrder: 1,
               fields: ['sender', 'recipient', 'message', 'eidType', 'userImage'],
               defaultValues: {},
@@ -334,7 +345,7 @@ export class DatabaseStorage implements IStorage {
               titleAr: 'شهادة شكر وتقدير',
               slug: 'Certificate1',
               categoryId: certificatesCategory.id,
-              imageUrl: 'https://images.unsplash.com/photo-1607344645866-009c320b63e0?ixlib=rb-1.2.1&auto=format&fit=crop&w=600&q=80',
+              imageUrl: '/static/certificate-template.svg',
               displayOrder: 1,
               fields: [
                 'issuedTo', 'issuedToGender', 'schoolName', 'reason', 'date', 
@@ -502,6 +513,113 @@ export class DatabaseStorage implements IStorage {
   async deleteUser(id: number): Promise<boolean> {
     const result = await db.delete(users).where(eq(users.id, id));
     return !!result;
+  }
+
+  // User Preferences methods
+  async getUserPreferences(userId: number): Promise<{layout?: string; theme?: string} | undefined> {
+    try {
+      // Since user preferences are stored as settings, we need to use direct SQL queries
+      // because the settings table structure doesn't match our schema definition
+      const query = `
+        SELECT key, value
+        FROM settings
+        WHERE category = 'user_preferences'
+        AND (key = $1 OR key = $2)
+      `;
+      
+      const result = await pool.query(query, [`user_${userId}_layout`, `user_${userId}_theme`]);
+      
+      if (!result.rows || result.rows.length === 0) {
+        return { layout: 'fluid', theme: 'system' }; // Default values
+      }
+      
+      // Create an object with the user preferences
+      const preferences: {layout?: string; theme?: string} = {
+        layout: 'fluid',  // Default
+        theme: 'system'   // Default
+      };
+      
+      for (const row of result.rows) {
+        try {
+          if (row.key === `user_${userId}_layout`) {
+            // Check if value is already a string or try to parse it as JSON
+            preferences.layout = typeof row.value === 'string' ? 
+              (row.value.startsWith('"') ? JSON.parse(row.value) : row.value) : 
+              row.value;
+          } else if (row.key === `user_${userId}_theme`) {
+            preferences.theme = typeof row.value === 'string' ? 
+              (row.value.startsWith('"') ? JSON.parse(row.value) : row.value) : 
+              row.value;
+          }
+        } catch (error) {
+          console.error(`Error parsing preference value for ${row.key}:`, error);
+          // If parsing fails, use the raw value as a fallback
+          if (row.key === `user_${userId}_layout`) {
+            preferences.layout = row.value;
+          } else if (row.key === `user_${userId}_theme`) {
+            preferences.theme = row.value;
+          }
+        }
+      }
+      
+      return preferences;
+    } catch (error) {
+      console.error('Error getting user preferences:', error);
+      return { layout: 'fluid', theme: 'system' }; // Return defaults on error
+    }
+  }
+
+  async saveUserPreferences(userId: number, preferences: {layout?: string; theme?: string}): Promise<boolean> {
+    try {
+      // For each preference, create or update a setting using direct SQL
+      // since the settings table structure doesn't match our schema definition
+      if (preferences.layout) {
+        const layoutQuery = `
+          INSERT INTO settings (key, value, category, description, updated_at)
+          VALUES ($1, $2, $3, $4, NOW())
+          ON CONFLICT (key) 
+          DO UPDATE SET 
+            value = $2,
+            updated_at = NOW()
+        `;
+        
+        await pool.query(
+          layoutQuery, 
+          [
+            `user_${userId}_layout`, 
+            JSON.stringify(preferences.layout),
+            'user_preferences',
+            'User layout preference'
+          ]
+        );
+      }
+      
+      if (preferences.theme) {
+        const themeQuery = `
+          INSERT INTO settings (key, value, category, description, updated_at)
+          VALUES ($1, $2, $3, $4, NOW())
+          ON CONFLICT (key) 
+          DO UPDATE SET 
+            value = $2,
+            updated_at = NOW()
+        `;
+        
+        await pool.query(
+          themeQuery, 
+          [
+            `user_${userId}_theme`,
+            JSON.stringify(preferences.theme),
+            'user_preferences',
+            'User theme preference'
+          ]
+        );
+      }
+      
+      return true;
+    } catch (error) {
+      console.error('Error saving user preferences:', error);
+      return false;
+    }
   }
 
   // Auth Provider Settings methods
@@ -1450,6 +1568,123 @@ export class DatabaseStorage implements IStorage {
       return result.rowCount > 0;
     } catch (error) {
       console.error("Error deleting user signature:", error);
+      return false;
+    }
+  }
+  
+  // إعدادات النظام - System Settings
+  async getSettings(category: string): Promise<any> {
+    try {
+      const settings: Record<string, any> = {};
+      const settingsData = await this.getSettingsByCategory(category);
+      
+      if (settingsData && settingsData.length > 0) {
+        for (const setting of settingsData) {
+          if (setting.key && setting.value !== undefined) {
+            try {
+              // محاولة تحليل القيمة كـ JSON إذا كانت مخزنة كنص
+              if (typeof setting.value === 'string' && (
+                setting.value.startsWith('{') || 
+                setting.value.startsWith('[') ||
+                setting.value === 'true' || 
+                setting.value === 'false' || 
+                !isNaN(Number(setting.value))
+              )) {
+                settings[setting.key] = JSON.parse(setting.value);
+              } else {
+                settings[setting.key] = setting.value;
+              }
+            } catch (e) {
+              // إذا فشل التحليل، استخدم القيمة كما هي
+              settings[setting.key] = setting.value;
+            }
+          }
+        }
+      }
+      
+      return settings;
+    } catch (error) {
+      console.error(`Error retrieving settings for category ${category}:`, error);
+      return {};
+    }
+  }
+  
+  async getSettingsByCategory(category: string): Promise<{key: string, value: any}[]> {
+    try {
+      // استخدام جدول الإعدادات لاسترجاع جميع الإعدادات في فئة معينة
+      const query = `SELECT key, value FROM settings WHERE category = '${category}'`;
+      const result = await db.execute(query);
+        
+      return result.rows.map((row: any) => ({
+        key: row.key,
+        value: row.value
+      }));
+    } catch (error) {
+      console.error(`Error retrieving settings for category ${category}:`, error);
+      return [];
+    }
+  }
+  
+  async updateSettings(category: string, data: any): Promise<boolean> {
+    try {
+      // تحديث أو إضافة كل إعداد
+      for (const [key, value] of Object.entries(data)) {
+        await this.updateSetting(category, key, value);
+      }
+      return true;
+    } catch (error) {
+      console.error(`Error updating settings for category ${category}:`, error);
+      return false;
+    }
+  }
+  
+  async getSetting(category: string, key: string): Promise<any> {
+    try {
+      const query = `SELECT value FROM settings WHERE category = '${category}' AND key = '${key}'`;
+      const result = await db.execute(query);
+      
+      if (result.rows.length === 0) return null;
+      const value = result.rows[0].value;
+      
+      // محاولة تحليل القيمة كـ JSON إذا كانت مخزنة كنص
+      if (typeof value === 'string') {
+        try {
+          return JSON.parse(value);
+        } catch (e) {
+          // إذا فشل التحليل، أعد القيمة كما هي
+          return value;
+        }
+      }
+      
+      return value;
+    } catch (error) {
+      console.error(`Error retrieving setting ${category}.${key}:`, error);
+      return null;
+    }
+  }
+  
+  async updateSetting(category: string, key: string, value: any): Promise<boolean> {
+    try {
+      // تحويل القيمة إلى JSON إذا كانت كائن أو مصفوفة
+      const valueToStore = typeof value === 'object' ? JSON.stringify(value) : String(value);
+      
+      // البحث عن الإعداد الحالي
+      const checkQuery = `SELECT key FROM settings WHERE category = '${category}' AND key = '${key}'`;
+      const checkResult = await db.execute(checkQuery);
+      
+      if (checkResult.rows.length > 0) {
+        // تحديث إذا كان موجودًا
+        const updateQuery = `UPDATE settings SET value = '${valueToStore}', updated_at = NOW() WHERE category = '${category}' AND key = '${key}'`;
+        await db.execute(updateQuery);
+      } else {
+        // إضافة إذا لم يكن موجودًا
+        const insertQuery = `INSERT INTO settings (category, key, value, updated_at) VALUES ('${category}', '${key}', '${valueToStore}', NOW())`;
+        await db.execute(insertQuery);
+      }
+      
+      return true;
+    } catch (error) {
+      console.error(`Error updating setting ${category}.${key}:`, error);
       return false;
     }
   }

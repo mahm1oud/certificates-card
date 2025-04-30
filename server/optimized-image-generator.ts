@@ -9,7 +9,7 @@
  * 4. يدعم المرونة في ضبط أبعاد الصورة الناتجة
  */
 
-import { createCanvas, loadImage } from 'canvas';
+import { createCanvas, loadImage, registerFont } from 'canvas';
 import sharp from 'sharp';
 import type { Template } from "@shared/schema";
 import path from "path";
@@ -20,14 +20,35 @@ import { db } from "./db";
 import { templateFields } from "@shared/schema";
 import { eq } from "drizzle-orm";
 
-// أنماط خطوط عربية
+// تسجيل الخطوط العربية المدعومة
+try {
+  const fontsDir = path.join(process.cwd(), 'fonts');
+  
+  // تسجيل خط Cairo
+  registerFont(path.join(fontsDir, 'Cairo-Regular.ttf'), { family: 'Cairo' });
+  registerFont(path.join(fontsDir, 'Cairo-Bold.ttf'), { family: 'Cairo', weight: 'bold' });
+  
+  // تسجيل خط Tajawal
+  registerFont(path.join(fontsDir, 'Tajawal-Regular.ttf'), { family: 'Tajawal' });
+  registerFont(path.join(fontsDir, 'Tajawal-Bold.ttf'), { family: 'Tajawal', weight: 'bold' });
+  
+  // تسجيل خط Amiri
+  registerFont(path.join(fontsDir, 'Amiri-Regular.ttf'), { family: 'Amiri' });
+  registerFont(path.join(fontsDir, 'Amiri-Bold.ttf'), { family: 'Amiri', weight: 'bold' });
+
+  console.log("✅ تم تسجيل الخطوط العربية بنجاح");
+} catch (error) {
+  console.warn("⚠️ لم يتم تسجيل الخطوط العربية:", error);
+}
+
+// أنماط خطوط عربية للاستخدام داخل الكود
 const ARABIC_FONTS = {
   CAIRO: 'Cairo',
-  CAIRO_BOLD: 'Cairo Bold',
+  CAIRO_BOLD: 'Cairo',    // سنستخدم Cairo بدون Bold وسنضيف bold في الخصائص
   TAJAWAL: 'Tajawal',
-  TAJAWAL_BOLD: 'Tajawal Bold',
+  TAJAWAL_BOLD: 'Tajawal', // سنستخدم Tajawal بدون Bold وسنضيف bold في الخصائص
   AMIRI: 'Amiri',
-  AMIRI_BOLD: 'Amiri Bold',
+  AMIRI_BOLD: 'Amiri',    // سنستخدم Amiri بدون Bold وسنضيف bold في الخصائص
 };
 
 interface FieldConfig {
@@ -297,17 +318,18 @@ export async function generateOptimizedCardImage({
   
   /**
    * حساب معامل القياس لضمان التطابق بين معاينة الواجهة والسيرفر
-   * IMPORTANT: هذه القيمة يجب أن تتطابق مع BASE_IMAGE_WIDTH في ملف DraggableFieldsPreviewPro.tsx
+   * IMPORTANT: هذه القيمة يجب أن تتطابق مع:
+   * 1. BASE_IMAGE_WIDTH في ملف DraggableFieldsPreviewPro.tsx
+   * 2. BASE_IMAGE_WIDTH في ملف client/src/components/konva-image-generator/optimized-image-generator.tsx
    * هذا ضروري لضمان التطابق 100% بين المعاينة والصورة النهائية
    * 
    * 🔴 ملاحظة هامة: 
-   * - المحرر (DraggableFieldsPreviewPro) يستخدم القيمة BASE_IMAGE_WIDTH = 1000
-   * - هنا يجب أن نستخدم نفس القيمة للحصول على تطابق 100%
-   * - أي تغيير في هذه القيمة يجب أن يكون متزامنًا في كلا المكانين
+   * - تم توحيد قيمة العرض الأساسي كـ BASE_IMAGE_WIDTH = 1000 في جميع المكونات
+   * - أي تغيير في هذه القيمة يجب أن يكون متزامنًا في جميع المكونات
    */
-  const clientBaseWidth = 1000; // عرض الكانفاس الافتراضي في واجهة DraggableFieldsPreviewPro
-  const scaleFactor = outputWidth / clientBaseWidth;
-  console.log(`Using font scale factor: ${scaleFactor} (Server canvas: ${outputWidth}px, Client preview: ${clientBaseWidth}px)`);
+  const BASE_IMAGE_WIDTH = 1000; // عرض الكانفاس الافتراضي في جميع واجهات المعاينة
+  const scaleFactor = outputWidth / BASE_IMAGE_WIDTH;
+  console.log(`Using font scale factor: ${scaleFactor} (Server canvas: ${outputWidth}px, Client preview: ${BASE_IMAGE_WIDTH}px)`);
   
   // إعداد سياق الرسم للنص
   ctx.textBaseline = 'middle';
@@ -388,9 +410,14 @@ export async function generateOptimizedCardImage({
         const img = await loadImage(imagePath);
         console.log(`Image loaded successfully: ${img.width}x${img.height}`);
         
-        // استخدام نفس منطق تحديد حجم الصور المستخدم في واجهة المستخدم (KonvaImageGenerator)
-        const imgMaxWidth = Math.round((style.imageMaxWidth || outputWidth / 4) * scaleFactor);
-        const imgMaxHeight = Math.round((style.imageMaxHeight || outputHeight / 4) * scaleFactor);
+        // استخدام النسب المئوية من أبعاد القالب لحساب الأبعاد الفعلية للصورة
+        // النسبة المئوية من حجم الصورة (على سبيل المثال: 25 تعني 25% من عرض القالب)
+        const widthPercentage = style.imageMaxWidth || 25; // افتراضي 25% من عرض القالب
+        const heightPercentage = style.imageMaxHeight || 25; // افتراضي 25% من ارتفاع القالب
+        
+        // تحويل النسب المئوية إلى أبعاد فعلية بالبكسل
+        const imgMaxWidth = Math.round((outputWidth * widthPercentage / 100));
+        const imgMaxHeight = Math.round((outputHeight * heightPercentage / 100));
         
         // حساب أبعاد الصورة مع الحفاظ على نسبة العرض إلى الارتفاع
         const aspectRatio = img.width / img.height;
@@ -490,35 +517,76 @@ export async function generateOptimizedCardImage({
     } else {
       // 📝 معالجة حقول النصوص
       // استخراج خصائص الخط مع تطبيق معامل القياس
-      const originalFontSize = style.fontSize || 24;
+      
+      // استخدام حجم الخط المحدد في خصائص الحقل، مع الحد الأدنى والأقصى لضمان القراءة على جميع الأجهزة
+      let originalFontSize = style.fontSize || 24;
+      
+      // ضمان أن حجم الخط لا يقل عن 14 ولا يزيد عن 60 بكسل لضمان القراءة على جميع الأجهزة
+      if (originalFontSize < 14) originalFontSize = 14;
+      if (originalFontSize > 60) originalFontSize = 60;
+      
+      // تطبيق معامل القياس
       const fontSize = Math.round(originalFontSize * scaleFactor);
+      
+      // استخدام وزن الخط المحدد في الخصائص
       const fontWeight = style.fontWeight || '';
+      
+      // استخدام نوع الخط المحدد في الخصائص
       const fontFamily = style.fontFamily || 'Cairo';
       
-      // إنشاء سلسلة الخط
-      let fontString = '';
-      if (fontFamily === 'Amiri') {
-        fontString = fontWeight === 'bold' 
-          ? `bold ${fontSize}px ${ARABIC_FONTS.AMIRI_BOLD}`
-          : `${fontSize}px ${ARABIC_FONTS.AMIRI}`;
-      } else if (fontFamily === 'Tajawal') {
-        fontString = fontWeight === 'bold'
-          ? `bold ${fontSize}px ${ARABIC_FONTS.TAJAWAL_BOLD}`
-          : `${fontSize}px ${ARABIC_FONTS.TAJAWAL}`;
+      // تسجيل معلومات الخط للتتبع
+      console.log(`Field ${field.name} font: ${fontSize}px ${fontFamily} (original: ${originalFontSize}px, scaled: ${fontSize}px)`);
+      
+      // تحسين التعامل مع أنواع الخطوط 
+      let finalFontFamily = ARABIC_FONTS.CAIRO; // الخط الافتراضي
+      let finalFontWeight = fontWeight || 'normal'; // وزن الخط الافتراضي
+      
+      // تخصيص أنواع الخطوط المدعومة بغض النظر عن حالة الأحرف
+      const normalizedFontFamily = fontFamily.toLowerCase();
+      
+      // تحديد نوع الخط المناسب
+      if (normalizedFontFamily === 'amiri' || normalizedFontFamily === 'أميري') {
+        finalFontFamily = ARABIC_FONTS.AMIRI;
+      } else if (normalizedFontFamily === 'tajawal' || normalizedFontFamily === 'تجوال') {
+        finalFontFamily = ARABIC_FONTS.TAJAWAL;
+      } else if (normalizedFontFamily === 'cairo' || normalizedFontFamily === 'القاهرة') {
+        finalFontFamily = ARABIC_FONTS.CAIRO;
       } else {
-        fontString = fontWeight === 'bold'
-          ? `bold ${fontSize}px ${ARABIC_FONTS.CAIRO_BOLD}`
-          : `${fontSize}px ${ARABIC_FONTS.CAIRO}`;
+        // إذا كان الخط غير مدعوم، استخدم خط Cairo الافتراضي ولكن سجل تحذيرًا
+        console.log(`تحذير: الخط "${fontFamily}" غير مدعوم، تم استخدام Cairo بدلاً منه`);
       }
+      
+      // تنظيف وضبط وزن الخط (bold أو normal)
+      if (finalFontWeight === 'bold' || finalFontWeight === '700') {
+        finalFontWeight = 'bold';
+      } else {
+        finalFontWeight = 'normal';
+      }
+      
+      // إنشاء سلسلة الخط النهائية مع دمج الوزن والحجم والنوع
+      const fontString = `${finalFontWeight} ${fontSize}px ${finalFontFamily}`;
+      
+      // تسجيل سلسلة الخط النهائية للتحقق
+      console.log(`Field ${fieldName} final font: ${fontString}`);
       
       // تطبيق الخط
       ctx.font = fontString;
       console.log(`Field ${fieldName} font: ${fontString} (original: ${originalFontSize}px, scaled: ${fontSize}px)`);
       
-      // تطبيق لون النص
-      if (style.color) {
-        ctx.fillStyle = style.color;
+      // تطبيق لون النص من خصائص الحقل مع تحسين الوضوح
+      let textColor = '#000000'; // اللون الافتراضي أسود
+      
+      // التحقق من وجود لون للنص في خصائص الحقل
+      if (style.color && typeof style.color === 'string' && style.color.trim() !== '') {
+        textColor = style.color.trim();
+        console.log(`استخدام لون النص من خصائص الحقل: ${textColor}`);
+      } else {
+        console.log(`استخدام لون النص الافتراضي: ${textColor}`);
       }
+      
+      // تطبيق لون النص على سياق الرسم
+      ctx.fillStyle = textColor;
+      console.log(`Field ${fieldName} color applied: ${textColor}`);
       
       // تطبيق محاذاة النص
       if (style.align) {

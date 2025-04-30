@@ -50,6 +50,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
     console.log("Serving static files from:", staticDir);
   }
   
+  /**
+   * دالة مساعدة لتحليل بيانات JSON بشكل آمن
+   * @param data البيانات المراد تحليلها
+   * @param defaultValue القيمة الافتراضية في حال فشل التحليل
+   * @returns البيانات المحللة أو القيمة الافتراضية
+   */
+  function parseJsonData(data: any, defaultValue: any): any {
+    try {
+      // إذا كان البيانات سلسلة نصية، حاول تحليلها
+      if (typeof data === 'string') {
+        return JSON.parse(data);
+      }
+      // إذا كان البيانات كائن، أرجعه كما هو
+      else if (data && typeof data === 'object') {
+        return data;
+      }
+      // في حال كانت البيانات غير محددة أو null، أرجع القيمة الافتراضية
+      return defaultValue;
+    } catch (error) {
+      console.warn(`فشل تحليل البيانات JSON: ${error}`);
+      return defaultValue;
+    }
+  }
+  
   // Setup file upload middleware
   const multerStorage = multer.diskStorage({
     destination: function(req, file, cb) {
@@ -1432,9 +1456,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
           defaultValue: fieldData.defaultValue,
           placeholder: fieldData.placeholder,
           placeholderAr: fieldData.placeholderAr,
-          options: fieldData.options ? JSON.parse(JSON.stringify(fieldData.options)) : [],
-          position: fieldData.position ? JSON.parse(JSON.stringify(fieldData.position)) : {},
-          style: fieldData.style ? JSON.parse(JSON.stringify(fieldData.style)) : {},
+          options: parseJsonData(fieldData.options, []),
+          position: parseJsonData(fieldData.position, { x: 50, y: 50 }),
+          style: parseJsonData(fieldData.style, {
+            fontFamily: 'Cairo',
+            fontSize: 24,
+            fontWeight: 'normal',
+            color: '#000000',
+            align: 'center',
+            verticalPosition: 'middle'
+          }),
           displayOrder: fieldData.displayOrder || 0,
           templateId: targetTemplateId
         };
@@ -1603,9 +1634,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         defaultValue: req.body.defaultValue || null,
         placeholder: req.body.placeholder || null,
         placeholderAr: req.body.placeholderAr || null,
-        options: req.body.options ? JSON.parse(JSON.stringify(req.body.options)) : [],
-        position: req.body.position ? JSON.parse(JSON.stringify(req.body.position)) : {},
-        style: req.body.style ? JSON.parse(JSON.stringify(req.body.style)) : {},
+        options: parseJsonData(req.body.options, []),
+        position: parseJsonData(req.body.position, { x: 50, y: 50 }),
+        style: parseJsonData(req.body.style, {
+          fontFamily: 'Cairo',
+          fontSize: 24,
+          fontWeight: 'normal',
+          color: '#000000',
+          align: 'center',
+          verticalPosition: 'middle'
+        }),
         displayOrder: req.body.displayOrder || 0,
         templateId: req.body.templateId
       };
@@ -1660,6 +1698,59 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(fields);
     } catch (error) {
       console.error("Error fetching template fields:", error);
+      res.status(500).json({ message: "حدث خطأ أثناء تحميل حقول القالب" });
+    }
+  });
+  
+  // Get template fields (public - no auth required)
+  app.get("/api/templates/:templateId/fields", async (req, res) => {
+    try {
+      const { templateId } = req.params;
+      
+      if (isNaN(parseInt(templateId))) {
+        return res.status(400).json({ message: "رقم القالب غير صالح" });
+      }
+      
+      // Check if template exists
+      const template = await storage.getTemplate(parseInt(templateId));
+      
+      if (!template) {
+        return res.status(404).json({ message: "القالب غير موجود" });
+      }
+      
+      const fields = await storage.getTemplateFields(parseInt(templateId));
+      console.log(`Retrieved ${fields.length} fields for template ID ${templateId} (public fields API)`);
+      res.json(fields);
+    } catch (error) {
+      console.error("Error fetching template fields (public):", error);
+      res.status(500).json({ message: "حدث خطأ أثناء تحميل حقول القالب" });
+    }
+  });
+  
+  // واجهة مباشرة لحقول القالب تتوافق مع ما يستخدمه العميل
+  // هذا يصلح أخطاء 404 التي نراها في السجلات
+  app.get("/api/template-fields/:templateId([0-9]+)", async (req, res) => {
+    try {
+      const { templateId } = req.params;
+      
+      if (isNaN(parseInt(templateId))) {
+        return res.status(400).json({ message: "رقم القالب غير صالح" });
+      }
+      
+      console.log(`[DIRECT API] Fetching fields for template ID ${templateId}`);
+      
+      // Check if template exists
+      const template = await storage.getTemplate(parseInt(templateId));
+      
+      if (!template) {
+        return res.status(404).json({ message: "القالب غير موجود" });
+      }
+      
+      const fields = await storage.getTemplateFields(parseInt(templateId));
+      console.log(`[DIRECT API] Retrieved ${fields.length} fields for template ID ${templateId}`);
+      res.json(fields);
+    } catch (error) {
+      console.error("[DIRECT API] Error fetching template fields:", error);
       res.status(500).json({ message: "حدث خطأ أثناء تحميل حقول القالب" });
     }
   });
@@ -1899,6 +1990,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
+  // Get template fields for certificates (public, no auth required)
   app.get("/api/certificate-templates/:id/fields", async (req, res) => {
     try {
       const { id } = req.params;
@@ -1917,10 +2009,213 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       const fields = await storage.getTemplateFields(templateId);
+      console.log(`Retrieved ${fields.length} fields for certificate template ID ${templateId} (public API)`);
       res.json(fields);
     } catch (error) {
       console.error("Error fetching certificate template fields:", error);
       res.status(500).json({ message: "حدث خطأ أثناء تحميل حقول قالب الشهادة" });
+    }
+  });
+
+  // User preferences API (public/authenticated)
+  app.get('/api/user/preferences', async (req, res) => {
+    try {
+      // Default preferences
+      const preferences = {
+        layout: 'boxed',
+        theme: 'light'
+      };
+
+      // If user is authenticated, try to get their saved preferences
+      if (req.user) {
+        try {
+          const userPreferences = await storage.getUserPreferences(req.user.id);
+          if (userPreferences) {
+            // Override defaults with user's saved preferences
+            Object.assign(preferences, userPreferences);
+          }
+        } catch (error) {
+          console.error('Error fetching user preferences:', error);
+        }
+      }
+      
+      res.json(preferences);
+    } catch (error) {
+      console.error('Error in preferences API:', error);
+      res.status(500).json({ message: 'حدث خطأ أثناء تحميل تفضيلات المستخدم' });
+    }
+  });
+
+  // Save user preferences (public/authenticated)
+  app.post('/api/user/preferences', async (req, res) => {
+    try {
+      const { layout, theme } = req.body;
+      
+      // Validate inputs
+      if (layout && !['boxed', 'fluid'].includes(layout)) {
+        return res.status(400).json({ message: 'قيمة التخطيط غير صالحة' });
+      }
+      
+      if (theme && !['light', 'dark', 'system'].includes(theme)) {
+        return res.status(400).json({ message: 'قيمة السمة غير صالحة' });
+      }
+      
+      // Preferences to save
+      const preferences = { 
+        layout: layout || 'boxed',
+        theme: theme || 'light'
+      };
+      
+      // If user is authenticated, save to database
+      if (req.user) {
+        await storage.saveUserPreferences(req.user.id, preferences);
+      }
+      
+      // Always save to session for both guests and authenticated users
+      if (req.session) {
+        req.session.userPreferences = preferences;
+      }
+      
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Error saving user preferences:', error);
+      res.status(500).json({ message: 'حدث خطأ أثناء حفظ تفضيلات المستخدم' });
+    }
+  });
+
+  // Get display settings (public API - frontend access)
+  app.get('/api/display', async (req, res) => {
+    try {
+      // استخدم القيم الافتراضية في حالة عدم وجود إعدادات
+      let settings = {
+        displayMode: 'multi',
+        templateViewMode: 'multi-page', // 'multi-page' للطريقة التقليدية، 'single-page' للطريقة الجديدة
+        enableSocialFormats: true,
+        defaultSocialFormat: 'instagram'
+      };
+      
+      try {
+        // محاولة استرجاع الإعدادات من قاعدة البيانات
+        const storedSettings = await storage.getSettingsByCategory('display');
+        
+        if (storedSettings && storedSettings.length > 0) {
+          // تجميع الإعدادات في كائن واحد
+          storedSettings.forEach((setting) => {
+            if (setting.key && setting.value) {
+              try {
+                const value = JSON.parse(String(setting.value));
+                settings[setting.key] = value;
+              } catch (e) {
+                settings[setting.key] = setting.value;
+              }
+            }
+          });
+        }
+      } catch (error) {
+        console.error('Error fetching display settings:', error);
+        // استمر باستخدام القيم الافتراضية
+      }
+      
+      res.json({ settings });
+    } catch (error) {
+      console.error('Error in display settings API:', error);
+      res.status(500).json({ message: 'Error fetching display settings' });
+    }
+  });
+  
+  // Public API for social formats - available to all users
+  app.get('/api/social-formats', async (req, res) => {
+    try {
+      // Import the social image generator module
+      const { DEFAULT_SOCIAL_FORMATS } = await import('./lib/social-image-generator');
+      
+      // Use the DEFAULT_SOCIAL_FORMATS from the module as a fallback
+      let formats = DEFAULT_SOCIAL_FORMATS;
+      
+      try {
+        // Try to get formats from database
+        const settingsArray = await storage.getSettingsByCategory('social-formats');
+        
+        // If formats exist in the database, use them
+        if (settingsArray && settingsArray.length > 0) {
+          formats = {};
+          
+          for (const setting of settingsArray) {
+            try {
+              if (setting.key && setting.value) {
+                formats[setting.key] = JSON.parse(String(setting.value));
+              }
+            } catch (parseError) {
+              console.error(`Error parsing format setting for ${setting.key}:`, parseError);
+            }
+          }
+        }
+      } catch (dbError) {
+        console.error('Error fetching social formats from database:', dbError);
+      }
+      
+      res.json({ formats });
+    } catch (error) {
+      console.error('Error fetching social formats:', error);
+      res.status(500).json({ message: 'Error fetching social formats' });
+    }
+  });
+  
+  // Admin display settings update endpoint
+  app.post('/api/admin/display-settings', isAuthenticated, isAdmin, async (req, res) => {
+    try {
+      const { displayMode, templateViewMode, enableSocialFormats, defaultSocialFormat } = req.body;
+      
+      // Validate inputs
+      if (displayMode && !['single', 'multi'].includes(displayMode)) {
+        return res.status(400).json({ message: 'قيمة وضع العرض غير صالحة' });
+      }
+      
+      if (templateViewMode && !['single-page', 'multi-page'].includes(templateViewMode)) {
+        return res.status(400).json({ message: 'قيمة وضع عرض القالب غير صالحة' });
+      }
+      
+      // Update each setting 
+      if (displayMode) {
+        await storage.createOrUpdateSetting({
+          key: 'displayMode',
+          value: displayMode,
+          category: 'display',
+          description: 'Display mode for the app (multi or single)'
+        });
+      }
+      
+      if (templateViewMode) {
+        await storage.createOrUpdateSetting({
+          key: 'templateViewMode',
+          value: templateViewMode,
+          category: 'display',
+          description: 'Template view mode (single-page or multi-page)'
+        });
+      }
+      
+      if (enableSocialFormats !== undefined) {
+        await storage.createOrUpdateSetting({
+          key: 'enableSocialFormats',
+          value: enableSocialFormats,
+          category: 'display',
+          description: 'Enable social media format options'
+        });
+      }
+      
+      if (defaultSocialFormat) {
+        await storage.createOrUpdateSetting({
+          key: 'defaultSocialFormat',
+          value: defaultSocialFormat,
+          category: 'display',
+          description: 'Default social media format'
+        });
+      }
+      
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Error updating display settings:', error);
+      res.status(500).json({ message: 'حدث خطأ أثناء تحديث إعدادات العرض' });
     }
   });
 
@@ -2141,8 +2436,58 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get available social media formats
   app.get("/api/social-formats", async (req, res) => {
     try {
-      const { getSocialFormats } = await import('./lib/social-image-generator');
-      const formats = await getSocialFormats();
+      // القيم المدعومة لتنسيقات الشبكات الاجتماعية
+      const formats = {
+        instagram: { 
+          width: 1080, 
+          height: 1080, 
+          ratio: '1:1', 
+          description: 'Instagram (Square)'
+        },
+        'instagram-portrait': { 
+          width: 1080, 
+          height: 1350, 
+          ratio: '4:5', 
+          description: 'Instagram (Portrait)'
+        },
+        'instagram-landscape': { 
+          width: 1080, 
+          height: 566, 
+          ratio: '1.91:1', 
+          description: 'Instagram (Landscape)'
+        },
+        'instagram-story': { 
+          width: 1080, 
+          height: 1920, 
+          ratio: '9:16', 
+          description: 'Instagram Story'
+        },
+        facebook: { 
+          width: 1200, 
+          height: 630, 
+          ratio: '1.91:1', 
+          description: 'Facebook'
+        },
+        twitter: { 
+          width: 1200, 
+          height: 675, 
+          ratio: '16:9', 
+          description: 'Twitter'
+        },
+        linkedin: { 
+          width: 1200, 
+          height: 627, 
+          ratio: '1.91:1', 
+          description: 'LinkedIn'
+        },
+        whatsapp: { 
+          width: 800, 
+          height: 800, 
+          ratio: '1:1', 
+          description: 'WhatsApp'
+        }
+      };
+      
       res.json({ formats });
     } catch (error) {
       console.error("Error fetching social formats:", error);
